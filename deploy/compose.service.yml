@@ -32,6 +32,7 @@
       - API_INTERNAL_URL=http://cloudtak-api:5000
       - TILES_INTERNAL_URL=http://cloudtak-tiles:5002
       - PRINT_CONCURRENCY=${PRINT_CONCURRENCY:-1}
+      - PRINT_RENDER_TIMEOUT_SECONDS=${PRINT_RENDER_TIMEOUT_SECONDS:-180}
       - PRINT_MAX_DPI=${PRINT_MAX_DPI:-200}
       - PRINT_LAYOUT_DPI=${PRINT_LAYOUT_DPI:-96}
     healthcheck:
@@ -44,8 +45,12 @@
       resources:
         limits:
           # SwiftShader is CPU-bound and parallelises, so this is the single
-          # biggest lever on render time — 2.0 cores made a full sheet take four
-          # times longer than the same work on a less constrained machine. Set it
-          # from what the box actually has spare, not from caution.
-          cpus: '8.0'
-          memory: 8G
+          # biggest lever on render time: 2.0 cores made a full sheet take four
+          # times longer than the same work on a less constrained machine.
+          #
+          # The default of 4 is chosen for an 8-core host — half the machine for a
+          # job that runs one at a time and is not latency-critical, leaving the
+          # other half for TAK Server and the API. Raise PRINT_CPUS on a bigger
+          # box; do not hardcode a number that would consume a small one.
+          cpus: '${PRINT_CPUS:-4.0}'
+          memory: ${PRINT_MEMORY:-4G}
