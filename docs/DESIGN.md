@@ -116,7 +116,7 @@ POST /print-api/jobs
 GET /print-api/jobs/:id -> { status, progress, url? }
 ```
 
-The client sends the style **as it currently has it**, rather than the service re-fetching it. That is what guarantees the print matches the screen — same layer visibility, same filters, same user tweaks.
+The client sends the style **as it currently has it**, rather than the service re-fetching it. That is what guarantees the print matches the screen — same layer visibility, same filters, same user tweaks. `warnings` comes back on the job whenever a source was dropped or a request blocked, so a blank map is never silent.
 
 ---
 
@@ -173,6 +173,32 @@ origin (`http://cloudtak-print.local`) fulfilled entirely from disk by Playwrigh
 This is not scaffolding — it is the same interception hook that will rewrite public tile hosts to `cloudtak-tiles:5002`.
 
 Playwright is also pinned to the full Chromium build in new-headless mode (`channel: 'chromium'`) rather than the default `chrome-headless-shell`, whose GL support is the weaker of the two. That matters when SwiftShader is the only renderer available.
+
+### Translating the client's style
+
+Three things in CloudTAK's live style only work inside a browser tab, and each needed an answer.
+
+**Sprites are a custom protocol.** `sprite` is `cloudtak-sprite://<id>`, a MapLibre protocol backed by the client's Dexie database (`api/web/src/stores/modules/icons.ts`). There is no Dexie here, so it is rewritten to `/api/iconset/<id>/sprite` on `cloudtak-api` — the same endpoint the client's own cache-miss path falls back to, not an invented one.
+
+**Most CoT icons are not in any sprite.** CloudTAK resolves them lazily through a `styleimagemissing` handler that reads Dexie per icon id. Reimplementing that resolver server-side would mean guessing at the same bitmap. Instead the plugin harvests the images from the live map (`map.listImages()` / `map.getImage()`) and ships them with the job as base64 RGBA; the service replays them with `map.addImage()`, both up front and from its own `styleimagemissing` handler. What prints is then literally the bitmap the user was looking at.
+
+**Glyphs and tiles point at public hostnames.** Rewritten to the internal service addresses so a thousand requests per sheet stay on the docker network.
+
+### The allowlist is enforced twice, on purpose
+
+`lib/style.ts` drops sources whose host is not allowed and records a warning. That alone is not sufficient: **a TileJSON document fetched from an allowed host can name tile URLs pointing anywhere**, and nothing in the submitted style would reveal it. So `lib/render.ts` also enforces the same allowlist inside the browser, on every request, aborting anything else and reporting it on the job.
+
+The allowlist is the internal services plus hosts named explicitly in `PRINT_ALLOW_HOSTS`. It defaults to **empty**, so external basemaps do not render until someone lists their host. Non-http schemes are refused outright, and suffix matching is anchored so `basemap.nationalmap.gov.evil.com` cannot pass as a subdomain of an allowed host.
+
+The caller's token is forwarded on every permitted request rather than the service minting one, so a user can only print what they can already see.
+
+### One dev-environment trap
+
+esbuild's `keepNames`, which `tsx` enables, wraps named function expressions in a `__name()` helper. `page.evaluate` serialises its function to a string and runs it in the page, where that helper does not exist — so everything evaluated fails with `__name is not defined` under `npm run dev` and works after `tsc`. A one-line shim is installed via `addInitScript` so dev and production behave identically instead of leaving a trap that appears in only one of them.
+
+### Measured, phase 2
+
+Full ANSI D sheet at 200 DPI (4200 x 6400), 40 CoT symbols with harvested icons, submitted and retrieved over HTTP: **10.7 s** end to end, from an 8 KB request payload. That still contains no vector basemap tiles — the remaining unknown, and one that will be dominated by tile fetch and label layout rather than rasterisation.
 
 ## 6. UTM grid engine
 
