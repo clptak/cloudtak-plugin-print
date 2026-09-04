@@ -108,3 +108,74 @@ test('a scale of 1 with no floor leaves the style untouched', () => {
     assert.equal(adjusted, 0);
     assert.equal((style.layers[0].paint as Record<string, number>)['line-width'], 0.6);
 });
+
+test('a zoom interpolate is scaled through its outputs, not wrapped', () => {
+    // The real failure: MapLibre requires ["zoom"] to be the direct input of a
+    // top-level step/interpolate. Wrapping it in ["*", ...] makes the whole style
+    // invalid — "zoom expression may only be used as input to a top-level step or
+    // interpolate expression".
+    const style = {
+        layers: [{
+            id: 'text-poly',
+            type: 'symbol',
+            layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 8, 8, 15, 15] },
+        }],
+    };
+
+    forPrint(style, OPTS);
+
+    assert.deepEqual(
+        (style.layers[0].layout as Record<string, unknown>)['text-size'],
+        ['interpolate', ['linear'], ['zoom'], 8, 16, 15, 30],
+        'stop inputs stay, stop outputs scale',
+    );
+});
+
+test('a zoom step is scaled through its default and its outputs', () => {
+    const style = {
+        layers: [{ id: 'l', type: 'line', paint: { 'line-width': ['step', ['zoom'], 1, 12, 2, 16, 4] } }],
+    };
+
+    forPrint(style, { ...OPTS, minLineMm: 0 });
+
+    assert.deepEqual(
+        (style.layers[0].paint as Record<string, unknown>)['line-width'],
+        ['step', ['zoom'], 2, 12, 4, 16, 8],
+    );
+});
+
+test('a floor also reaches inside a zoom expression rather than wrapping it', () => {
+    const style = {
+        layers: [{ id: 'contour', type: 'line', paint: { 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.2, 16, 4] } }],
+    };
+
+    forPrint(style, { markScale: 1, minLineMm: 0.2, layoutDpi: 200 });
+
+    const width = (style.layers[0].paint as Record<string, unknown>)['line-width'] as unknown[];
+    assert.equal(width[0], 'interpolate');
+    assert.equal(width[4], MIN_PX, 'the thin end is lifted to the floor');
+    assert.equal(width[6], 4, 'the thick end is untouched');
+});
+
+test('a data-driven expression is still wrapped, since it has no zoom input', () => {
+    const style = {
+        layers: [{ id: 'l', type: 'line', paint: { 'line-width': ['get', 'width'] } }],
+    };
+
+    forPrint(style, { ...OPTS, minLineMm: 0 });
+
+    assert.deepEqual(
+        (style.layers[0].paint as Record<string, unknown>)['line-width'],
+        ['*', ['get', 'width'], 2],
+    );
+});
+
+test('an unrecognised expression mentioning zoom is left alone rather than broken', () => {
+    // Better a mark at the wrong size than a style MapLibre refuses to load.
+    const original = ['case', ['>', ['zoom'], 12], 2, 1];
+    const style = { layers: [{ id: 'l', type: 'line', paint: { 'line-width': original } }] };
+
+    forPrint(style, { ...OPTS, minLineMm: 0 });
+
+    assert.deepEqual((style.layers[0].paint as Record<string, unknown>)['line-width'], original);
+});

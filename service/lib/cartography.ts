@@ -37,50 +37,106 @@ const isStops = (v: Json): v is { base?: number; stops: Array<[number, number]> 
 };
 
 /**
- * Multiply a numeric style property, whatever form it takes.
+ * Does this expression reference the zoom level anywhere inside it?
  *
- * MapLibre allows a plain number, a legacy `{base, stops}` object, or an
- * expression. Expressions cannot be evaluated here — they may be data-driven —
- * so they are wrapped rather than computed.
+ * It matters because MapLibre requires `["zoom"]` to be the direct input of a
+ * TOP-LEVEL `step` or `interpolate`. Wrapping such an expression in anything —
+ * `["*", expr, 2]`, `["max", expr, 1.5]` — makes it invalid and MapLibre rejects
+ * the whole style. So a zoom expression must be transformed from the inside, by
+ * rewriting its output values, never from the outside.
  */
-export function scaleNumeric(value: Json, factor: number, fallback: number): Json {
-    if (factor === 1) return value === undefined ? undefined : value;
+function referencesZoom(value: Json): boolean {
+    if (!Array.isArray(value)) return false;
+    if (value[0] === 'zoom') return true;
+    return value.some((item) => {
+        return referencesZoom(item);
+    });
+}
 
-    if (value === undefined) return fallback * factor;
+const INTERPOLATORS = new Set(['interpolate', 'interpolate-hcl', 'interpolate-lab']);
 
-    if (typeof value === 'number') return value * factor;
+/**
+ * Apply a numeric transform to a style property in any form MapLibre allows.
+ *
+ * Plain numbers and legacy `{base, stops}` are transformed directly. For
+ * `interpolate` and `step` the OUTPUT values are transformed and the zoom input
+ * left untouched, which keeps the expression valid. Any other expression that
+ * mentions zoom is left alone rather than risking an invalid style; everything
+ * else is wrapped.
+ */
+function mapNumeric(
+    value: Json,
+    leaf: (n: number) => number,
+    wrap: (expr: Json[]) => Json,
+    fallback?: number,
+): Json {
+    if (value === undefined) return fallback === undefined ? undefined : leaf(fallback);
+
+    if (typeof value === 'number') return leaf(value);
 
     if (isStops(value)) {
         return {
             ...value,
             stops: value.stops.map(([zoom, v]) => {
-                return [zoom, typeof v === 'number' ? v * factor : v] as [number, number];
+                return [zoom, typeof v === 'number' ? leaf(v) : v] as [number, number];
             }),
         };
     }
 
-    if (Array.isArray(value)) return ['*', value, factor];
+    if (Array.isArray(value)) {
+        const op = value[0];
+
+        if (INTERPOLATORS.has(op as string)) {
+            // ["interpolate", interpolation, input, stop_in, stop_out, ...]
+            const out = value.slice();
+            for (let i = 4; i < out.length; i += 2) out[i] = mapNumeric(out[i], leaf, wrap);
+            return out;
+        }
+
+        if (op === 'step') {
+            // ["step", input, default_out, stop_in, stop_out, ...]
+            const out = value.slice();
+            out[2] = mapNumeric(out[2], leaf, wrap);
+            for (let i = 4; i < out.length; i += 2) out[i] = mapNumeric(out[i], leaf, wrap);
+            return out;
+        }
+
+        if (referencesZoom(value)) return value;
+
+        return wrap(value);
+    }
 
     return value;
 }
 
+/** Multiply a numeric style property, whatever form it takes. */
+export function scaleNumeric(value: Json, factor: number, fallback: number): Json {
+    if (factor === 1) return value;
+
+    return mapNumeric(
+        value,
+        (n) => {
+            return n * factor;
+        },
+        (expr) => {
+            return ['*', expr, factor];
+        },
+        fallback,
+    );
+}
+
 /** Apply a lower bound to a numeric property, preserving expressions. */
 export function floorNumeric(value: Json, minimum: number): Json {
-    if (typeof value === 'number') return Math.max(value, minimum);
-    if (value === undefined) return minimum;
-
-    if (isStops(value)) {
-        return {
-            ...value,
-            stops: (value.stops as Array<[number, number]>).map(([zoom, v]) => {
-                return [zoom, typeof v === 'number' ? Math.max(v, minimum) : v] as [number, number];
-            }),
-        };
-    }
-
-    if (Array.isArray(value)) return ['max', value, minimum];
-
-    return value;
+    return mapNumeric(
+        value,
+        (n) => {
+            return Math.max(n, minimum);
+        },
+        (expr) => {
+            return ['max', expr, minimum];
+        },
+        minimum,
+    );
 }
 
 export function forPrint(
@@ -102,7 +158,10 @@ export function forPrint(
 
         if (layer.type === 'line') {
             // Defaults from the style spec, so an unspecified width still gets a floor.
-            paint['line-width'] = floorNumeric(scaleNumeric(paint['line-width'], opts.markScale, 1), minLinePx);
+            const scaled = scaleNumeric(paint['line-width'], opts.markScale, 1);
+            // Only apply the floor when there is one; otherwise every expression
+            // picks up a pointless ["max", expr, 0] wrapper.
+            paint['line-width'] = minLinePx > 0 ? floorNumeric(scaled, minLinePx) : scaled;
             if (paint['line-gap-width'] !== undefined) {
                 paint['line-gap-width'] = scaleNumeric(paint['line-gap-width'], opts.markScale, 0);
             }
