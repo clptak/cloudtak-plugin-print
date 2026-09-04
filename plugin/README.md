@@ -28,11 +28,18 @@ It does not harvest your auth token; mint one on the VPS.
 
 ### Using it
 
-On the dev CloudTAK, with the map showing the area you want:
+On the dev CloudTAK, with the map view open and fully loaded, showing the area you
+want:
 
 ```js
 // paste the contents of harvest-console.js
 ```
+
+The map is not on `window` — CloudTAK keeps it on a Pinia store
+(`defineStore('cloudtak', ...)` in `api/web/src/stores/map.ts`), so the script
+reaches it through the Vue app that Vue 3 stamps onto `#app` as `__vue_app__`.
+It caches what it finds at `window.__map`, which is also handy for poking at the
+map by hand.
 
 Then on the VPS:
 

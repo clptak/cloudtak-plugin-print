@@ -20,19 +20,55 @@
  * It does NOT harvest your auth token. Mint one on the VPS instead.
  */
 (async () => {
-    const map =
-        window.__map
-        || window.map
-        || (window.mapStore && window.mapStore.map)
-        || (document.querySelector('.maplibregl-map') || {})._map;
+    /*
+     * CloudTAK keeps the map on a Pinia store, not on window, so it has to be
+     * reached through the Vue app: Vue 3 stamps the app onto its mount element as
+     * __vue_app__, and Pinia keeps its stores in `_s` keyed by id. The map store
+     * is `defineStore('cloudtak', ...)` in api/web/src/stores/map.ts.
+     */
+    const isMap = (m) => m && typeof m.getStyle === 'function' && typeof m.listImages === 'function';
 
-    if (!map || typeof map.getStyle !== 'function') {
+    const fromPinia = () => {
+        const el = document.getElementById('app') || document.querySelector('[data-v-app]');
+        const app = el && el.__vue_app__;
+        if (!app) return null;
+
+        let pinia = app.config && app.config.globalProperties && app.config.globalProperties.$pinia;
+
+        if (!pinia && app._context && app._context.provides) {
+            const provides = app._context.provides;
+            pinia = Object.getOwnPropertySymbols(provides)
+                .map((sym) => provides[sym])
+                .find((value) => value && value._s instanceof Map);
+        }
+
+        if (!pinia || !(pinia._s instanceof Map)) return null;
+
+        const store = pinia._s.get('cloudtak');
+        if (store && isMap(store.map)) return store.map;
+
+        // The store id could change upstream; fall back to whichever store holds a map.
+        for (const candidate of pinia._s.values()) {
+            if (candidate && isMap(candidate.map)) return candidate.map;
+        }
+
+        return null;
+    };
+
+    const map = [window.__map, window.map, fromPinia()].find(isMap);
+
+    if (!map) {
         console.error(
-            'Could not find the MapLibre map on window. Open the CloudTAK map view first. '
-            + 'If it is still not found, run:  window.__map = <your map reference>  and re-run this.',
+            'Could not reach the MapLibre map.\n'
+            + '  1. Be on the CloudTAK map view, fully loaded, not a settings or admin page.\n'
+            + '  2. Check the Vue app is reachable:  document.getElementById("app").__vue_app__\n'
+            + '  3. If all else fails, set it by hand and re-run:  window.__map = <map>',
         );
         return;
     }
+
+    // Cache it so re-runs are instant and the map is available for poking at.
+    window.__map = map;
 
     const style = JSON.parse(JSON.stringify(map.getStyle()));
 
