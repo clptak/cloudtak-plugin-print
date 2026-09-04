@@ -27,6 +27,13 @@ export const PrintRequest = Type.Object({
 
     dpi: Type.Optional(Type.Integer({ minimum: 50, maximum: 600 })),
 
+    /**
+     * Render tiny and fail fast. Same style, same sources, same code path, but a
+     * postcard-sized viewport and a short timeout — so diagnosing a stuck render
+     * costs a minute instead of ten. Not for producing a sheet.
+     */
+    probe: Type.Optional(Type.Boolean()),
+
     /** MapLibre style document, exactly as the client currently has it. */
     style: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 

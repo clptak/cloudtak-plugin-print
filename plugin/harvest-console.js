@@ -126,10 +126,24 @@
         return btoa(binary);
     };
 
+    /*
+     * Ship only the images the style actually references.
+     *
+     * A live CloudTAK map has every icon it has ever resolved sitting in its image
+     * pool, and harvesting all of them produced an 18 MB payload for a sheet that
+     * uses a few dozen. Matching against the serialised layers catches ids used as
+     * literals anywhere in an expression; anything built dynamically at runtime
+     * cannot be found this way, and the count below says how many were left out.
+     */
+    const layerText = JSON.stringify(style.layers || []);
+    const all = map.listImages();
+    const referenced = all.filter((id) => layerText.includes(JSON.stringify(id)));
+    const wanted = referenced.length ? referenced : all;
+
     const images = [];
     let skipped = 0;
 
-    for (const id of map.listImages()) {
+    for (const id of wanted) {
         const image = map.getImage(id);
         if (!image) { skipped++; continue; }
 
@@ -182,7 +196,10 @@
         console.warn('  OVERLAYS NOT RESOLVED (these will be dropped):', unresolved);
         console.warn('  They are probably not loaded yet — pan the map, wait, and re-run.');
     }
-    console.log('  images harvested:   ', images.length, skipped ? `(${skipped} skipped)` : '');
+    console.log('  images harvested:   ', images.length, `of ${all.length} in the pool`, skipped ? `(${skipped} unreadable)` : '');
+    if (referenced.length && referenced.length < all.length) {
+        console.log('  images omitted:     ', all.length - referenced.length, '(not referenced by any layer)');
+    }
     console.log('  payload:            ', (json.length / 1048576).toFixed(2), 'MB');
     console.log('  centre:             ', payload.center, ' zoom now:', map.getZoom().toFixed(2));
 

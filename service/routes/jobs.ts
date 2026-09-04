@@ -67,6 +67,10 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
 
             // DPI is clamped, not rejected. The binding constraint is the GL texture
             // limit — 8192 under SwiftShader — applied to the backing store.
+            // A probe deliberately ignores the sheet geometry: the point is to
+            // exercise the same style and sources as cheaply as possible.
+            const probe = body.probe === true;
+
             const resolution = resolve({
                 frameInches: geometry.frame,
                 requestedDpi: body.dpi,
@@ -109,16 +113,16 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 ctx.progress(0.1, 'rendering map');
 
                 const result = await renderMap({
-                    width: resolution.css.width,
-                    height: resolution.css.height,
-                    scale: resolution.deviceScale,
+                    width: probe ? 480 : resolution.css.width,
+                    height: probe ? 320 : resolution.css.height,
+                    scale: probe ? 1 : resolution.deviceScale,
                     style,
                     center,
                     zoom,
                     images: body.images,
                     overlays: body.overlays,
                     token: raw,
-                    timeoutMs: c.renderTimeoutMs,
+                    timeoutMs: probe ? 60000 : c.renderTimeoutMs,
                     onProgress: (step) => {
                         ctx.progress(0.5, step);
                     },
