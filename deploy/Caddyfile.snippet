@@ -1,0 +1,27 @@
+# Add to the EXISTING cloudtak.{$PRIMARY_DOMAIN} site block, alongside the
+# handle /sync/* block that is already there.
+#
+# Same-origin path rather than a print. subdomain because:
+#   - the cloudtak site block has no forward_auth, so XHR never meets Authentik
+#     and never gets a 302 into a login page
+#   - CSP connect-src 'self' already covers it (see api/nginx.conf.js)
+#   - no new certificate, no new DNS record
+#
+# /print-api/ and not /print/ because CloudTAK's SPA is the catch-all handle {},
+# so a Vue route at /print would be intercepted here on a hard reload.
+
+cloudtak.{$PRIMARY_DOMAIN} {
+        import rsa_cert
+
+        handle /sync/* {
+                reverse_proxy {$NODERED2_UPSTREAM:nodered}:1880
+        }
+
+        handle /print-api/* {
+                reverse_proxy cloudtak-print:5010
+        }
+
+        handle {
+                reverse_proxy cloudtak-api:5000
+        }
+}

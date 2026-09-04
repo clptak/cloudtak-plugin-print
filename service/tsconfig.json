@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "strict": true,
+        "preserveConstEnums": true,
+        "outDir": "dist",
+        "sourceMap": false,
+        "module": "node16",
+        "moduleResolution": "node16",
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true
+    },
+    "exclude": ["node_modules", "dist"]
+}

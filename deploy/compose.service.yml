@@ -1,0 +1,44 @@
+# Paste into the tak-stack docker-compose.yml services block.
+#
+# Port 5010, not 5003 — cloudtak-events already publishes 5003.
+# `expose` and never `ports` — a service whose job is to fetch URLs and render
+# them must not be reachable except through Caddy, authenticated.
+
+  cloudtak-print:
+    container_name: cloudtak-print
+    build:
+      context: ${HOME_DIRECTORY_PATH}/tak-stack/cloudtak-plugin-print/service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - cloudtak-api
+      - cloudtak-tiles
+      - cloudtak-store
+    expose:
+      - "5010"
+    # Docker's 64MB /dev/shm default crashes Chromium on large canvases.
+    shm_size: '1gb'
+    env_file: .env
+    environment:
+      - API_URL=http://cloudtak-api:5000
+      - TILES_INTERNAL_URL=http://cloudtak-tiles:5002
+      - TILES_PUBLIC_HOST=tiles.cloudtak.${PRIMARY_DOMAIN}
+      - SigningSecret=${SigningSecret}
+      - ASSET_BUCKET=${ASSET_BUCKET}
+      - AWS_S3_Endpoint=${AWS_S3_Endpoint}
+      - AWS_S3_AccessKeyId=${AWS_S3_AccessKeyId}
+      - AWS_S3_SecretAccessKey=${AWS_S3_SecretAccessKey}
+      - PRINT_CONCURRENCY=${PRINT_CONCURRENCY:-1}
+      - PRINT_MAX_DPI=${PRINT_MAX_DPI:-200}
+      - PRINT_LAYOUT_DPI=${PRINT_LAYOUT_DPI:-96}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:5010/print-api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
