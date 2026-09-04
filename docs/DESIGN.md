@@ -377,8 +377,10 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
 ## 10. Phasing
 
 1. ~~Service skeleton — JWT verification, job queue, Chromium boot, health check.~~ **Done.**
-2. ~~Map render only — style + overlays to PNG at a fixed size.~~ **Done**, pending
-   fidelity comparison against the client on a real vector basemap.
+2. ~~Map render only — style + overlays to PNG at a fixed size.~~ **Done and proven**
+   on 2026-09-04 against a live CloudTAK style: vector basemap, hillshade,
+   contours, raster overlays, glyph labels, harvested CoT icons and cell-site
+   overlays all rendered headless from a browser-harvested payload.
 3. Page layout — `@page`, map frame, title block. First real PDF.
 4. UTM grid engine, zone-aware, with edge labels.
 5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.
