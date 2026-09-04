@@ -82,6 +82,8 @@ export const SheetGeometry = Type.Object({
     frameInches: Type.Object({ width: Type.Number(), height: Type.Number() }),
     groundMetres: Type.Object({ width: Type.Number(), height: Type.Number() }),
     dpi: Type.Integer(),
+    /** CSS pixels per inch used for layout; equals dpi unless overridden. */
+    layoutDpi: Type.Integer(),
     pixels: Type.Object({ width: Type.Integer(), height: Type.Integer() }),
     /** Why the requested DPI was lowered, if it was. */
     clampedBy: Type.Union([Type.Literal('none'), Type.Literal('ceiling'), Type.Literal('texture')]),

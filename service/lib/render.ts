@@ -2,6 +2,7 @@ import Err from '@openaddresses/batch-error';
 import type { Route, Request as PWRequest } from 'playwright';
 import { withMapPage, type PageSize } from './browser.js';
 import { rewriteStyle, redact, type StyleDocument, type RewriteOptions } from './style.js';
+import { forPrint, type CartographyOptions } from './cartography.js';
 
 /**
  * A sprite image harvested from the client's live map.
@@ -39,6 +40,8 @@ export type RenderRequest = PageSize & {
     /** Forwarded CloudTAK token; the renderer never mints its own. */
     token?: string;
     rewrite: RewriteOptions;
+    /** Adapt the style for paper. Omit to render it exactly as the screen has it. */
+    cartography?: CartographyOptions;
     timeoutMs?: number;
     /** Called with a human-readable step so a long render is not a silent one. */
     onProgress?: (step: string) => void;
@@ -106,6 +109,15 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
         token: req.token,
         hasImages: !!(req.images && req.images.length),
     });
+
+    if (req.cartography) forPrint(style, req.cartography);
+
+    /*
+     * A print sheet is a flat north-up page, so the globe projection CloudTAK
+     * uses on screen has no place on it — near the poles it would put a visible
+     * scale error on a sheet whose whole promise is that an inch means something.
+     */
+    if (style.projection) style.projection = { type: 'mercator' };
 
     const allow = allowedHosts(req.rewrite);
     const blocked = new Set<string>();

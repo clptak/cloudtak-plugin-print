@@ -11,6 +11,8 @@ export const DPI_LADDER = [300, 200, 150, 120, 100, 72];
 
 export type Resolved = {
     dpi: number;
+    /** CSS pixels per inch actually used for layout. */
+    layoutDpi: number;
     /** Layout size in CSS pixels — this is what drives label density. */
     css: { width: number; height: number };
     /** Chromium deviceScaleFactor. */
@@ -38,10 +40,17 @@ export function resolve(opts: {
     frameInches: { width: number; height: number };
     requestedDpi?: number;
     maxDpi: number;
-    layoutDpi: number;
+    /**
+     * CSS pixels per inch for layout. Omit (or 0) to lay out at the OUTPUT
+     * resolution, which is the right default: it makes deviceScaleFactor 1, so
+     * MapLibre selects raster tiles for the zoom actually being printed instead
+     * of picking screen-resolution tiles and letting Chromium stretch them. The
+     * output pixel count is identical either way.
+     */
+    layoutDpi?: number;
     maxTexture: number;
 }): Resolved {
-    const { frameInches, maxDpi, layoutDpi, maxTexture } = opts;
+    const { frameInches, maxDpi, maxTexture } = opts;
 
     const longestEdge = Math.max(frameInches.width, frameInches.height);
     const textureCeiling = maxTexture / longestEdge;
@@ -68,6 +77,8 @@ export function resolve(opts: {
         clampedBy = textureCeiling < Math.min(requested, maxDpi) ? 'texture' : 'ceiling';
     }
 
+    const layoutDpi = opts.layoutDpi && opts.layoutDpi > 0 ? opts.layoutDpi : dpi;
+
     const css = {
         width: frameInches.width * layoutDpi,
         height: frameInches.height * layoutDpi,
@@ -77,6 +88,7 @@ export function resolve(opts: {
 
     return {
         dpi,
+        layoutDpi,
         css,
         deviceScale,
         pixels: {

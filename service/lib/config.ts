@@ -67,7 +67,18 @@ export type Config = {
      * independently of output resolution. Lower means sparser, more map-like
      * labelling. Tune empirically against real sheets.
      */
+    /** 0 means follow the output DPI, which is the recommended default. */
     layoutDpi: number;
+    /**
+     * Mark size multiplier for print. Undefined means derive it from the layout
+     * resolution (layoutDpi / 96), which keeps marks the physical size they had
+     * when the style was authored for a screen.
+     */
+    markScale: number | undefined;
+    /** Minimum printed line width in millimetres. Below ~0.2mm lines vanish. */
+    minLineMm: number;
+    /** Multiply line opacity by this, capped at 1. */
+    lineOpacityBoost: number;
     /**
      * GL MAX_TEXTURE_SIZE assumed when sizing a sheet. Measured at 8192 under
      * SwiftShader — half what real hardware reports. GET /print-api/smoke/webgl
@@ -101,7 +112,12 @@ export default function config(): Config {
         assetBucket: process.env.ASSET_BUCKET || '',
         concurrency: int('PRINT_CONCURRENCY', 1),
         maxDpi: int('PRINT_MAX_DPI', 200),
-        layoutDpi: int('PRINT_LAYOUT_DPI', 96),
+        layoutDpi: int('PRINT_LAYOUT_DPI', 0),
+        markScale: process.env.PRINT_MARK_SCALE ? Number(process.env.PRINT_MARK_SCALE) : undefined,
+        minLineMm: process.env.PRINT_MIN_LINE_MM ? Number(process.env.PRINT_MIN_LINE_MM) : 0.2,
+        lineOpacityBoost: process.env.PRINT_LINE_OPACITY_BOOST
+            ? Number(process.env.PRINT_LINE_OPACITY_BOOST)
+            : 1,
         maxTexture: int('PRINT_MAX_TEXTURE', 8192),
         jobTtlMs: int('PRINT_JOB_TTL_SECONDS', 3600) * 1000,
         renderTimeoutMs: int('PRINT_RENDER_TIMEOUT_SECONDS', 180) * 1000,

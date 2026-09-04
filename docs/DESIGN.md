@@ -204,6 +204,21 @@ The renderer therefore polls `map.loaded()` and requires two consecutive true re
 
 Tokens in the style are also **replaced, not preserved**. The style is a snapshot of the client's map, and CloudTAK stamps tokens into tile URLs when it builds TileJSON; by the time a harvested job is submitted that token can be hours old. An expired token on every tile URL fails the whole sheet, and Chromium reports the result as an opaque `net::ERR_FAILED`. The caller's token is the authoritative one — and it is only ever applied to CloudTAK's own hosts, never to a third-party basemap.
 
+### Screen styles do not print
+
+The first real sheet came back with ghost contours and blocky hillshading, and both had the same root cause: **the map was being laid out for a 96 dpi screen and then enlarged to 200 dpi.**
+
+With `layoutDpi` at 96 and `deviceScaleFactor` around 2, MapLibre selects raster tiles for the *screen* zoom and Chromium stretches them to fill the page — hence visible tile blocks in anything raster, which on that sheet was two basemap layers at 0.3 and 0.4 opacity. Marks suffer the mirror-image problem: they keep their pixel size and so shrink physically. Measured on the real style, `26-Contour_12/0` is `line-width: 0.6`, which is **0.16 mm on paper** — under what most printers reproduce.
+
+The fix has two halves and they only work together:
+
+1. **Lay out at the output resolution** (`layoutDpi` defaults to the chosen DPI). `deviceScaleFactor` becomes 1, so MapLibre fetches tiles for the zoom actually being printed. The output pixel count is unchanged — this costs nothing.
+2. **Scale every mark back up** by `layoutDpi / 96`, so a line that read as 1 px on screen occupies the same physical width on paper.
+
+Then `PRINT_MIN_LINE_MM` (default 0.2) puts a floor under printed line width, because a style may simply specify marks too fine to print however the page is laid out. `lib/cartography.ts` handles all three forms a numeric style property can take — plain number, legacy `{base, stops}`, and expression, which is wrapped as `["max", ["*", expr, scale], min]` rather than evaluated, since it may be data-driven.
+
+The globe projection CloudTAK uses on screen is also forced to mercator: a print sheet is a flat north-up page, and near the poles a globe would put a visible scale error on a sheet whose whole promise is that an inch means something.
+
 ### One dev-environment trap
 
 esbuild's `keepNames`, which `tsx` enables, wraps named function expressions in a `__name()` helper. `page.evaluate` serialises its function to a string and runs it in the page, where that helper does not exist — so everything evaluated fails with `__name is not defined` under `npm run dev` and works after `tsc`. A one-line shim is installed via `addInitScript` so dev and production behave identically instead of leaving a trap that appears in only one of them.

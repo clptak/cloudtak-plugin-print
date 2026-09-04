@@ -84,12 +84,13 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
             });
 
             // Scale is exact at the sheet's centre latitude; see lib/geo.ts.
-            const zoom = zoomForScale(scale, c.layoutDpi, center[1]);
+            const zoom = zoomForScale(scale, resolution.layoutDpi, center[1]);
 
             const derived = {
                 frameInches: { width: geometry.frame.width, height: geometry.frame.height },
                 groundMetres: { width: Math.round(ground.width), height: Math.round(ground.height) },
                 dpi: resolution.dpi,
+                layoutDpi: resolution.layoutDpi,
                 pixels: resolution.pixels,
                 clampedBy: resolution.clampedBy,
                 scale,
@@ -145,6 +146,14 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                     timeoutMs: probe ? 60000 : c.renderTimeoutMs,
                     onProgress: (step) => {
                         ctx.progress(0.5, step);
+                    },
+                    cartography: {
+                        // Keep marks the physical size the style author intended for a
+                        // screen, now that the map is laid out at print resolution.
+                        markScale: c.markScale ?? resolution.layoutDpi / 96,
+                        minLineMm: c.minLineMm,
+                        layoutDpi: resolution.layoutDpi,
+                        lineOpacityBoost: c.lineOpacityBoost,
                     },
                     rewrite: {
                         apiInternalUrl: c.apiUrl,
