@@ -122,9 +122,25 @@ function rewriteUrl(raw: string, opts: RewriteOptions): { url: string; kind: Cla
     return { url: parsed.toString().replace(/%7B/g, '{').replace(/%7D/g, '}'), kind };
 }
 
-function withToken(url: string, token?: string): string {
-    if (!token || url.includes('token=')) return url;
-    return url + (url.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
+/**
+ * Put the caller's token on a CloudTAK URL, REPLACING any token already there.
+ *
+ * The style is a snapshot of the client's map, and CloudTAK stamps tokens into
+ * tile URLs when it builds TileJSON. By the time a harvested job is submitted
+ * that token may be hours old and expired, and an expired token on every tile
+ * URL fails the whole sheet. The caller's token is the authoritative one.
+ *
+ * Only ever applied to CloudTAK's own hosts — a third-party basemap must never
+ * receive it.
+ */
+function setToken(url: string, token?: string): string {
+    if (!token) return url;
+
+    const stripped = url
+        .replace(/([?&])token=[^&]*&/g, '$1')
+        .replace(/[?&]token=[^&]*$/, '');
+
+    return stripped + (stripped.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
 }
 
 function rewriteSprite(sprite: unknown, opts: RewriteOptions): unknown {
@@ -134,12 +150,12 @@ function rewriteSprite(sprite: unknown, opts: RewriteOptions): unknown {
             // The client's own cache-miss path fetches /api/iconset/<id>/sprite.json,
             // so this is the documented fallback rather than an invented endpoint.
             // MapLibre appends .json/.png and an @2x suffix itself.
-            return withToken(
+            return setToken(
                 `${opts.apiInternalUrl.replace(/\/$/, '')}/api/iconset/${match[1]}/sprite`,
                 opts.token,
             );
         }
-        return withToken(rewriteUrl(entry, opts).url, opts.token);
+        return setToken(rewriteUrl(entry, opts).url, opts.token);
     };
 
     if (typeof sprite === 'string') return one(sprite);
@@ -189,7 +205,7 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
             );
             delete style.glyphs;
         } else {
-            style.glyphs = withToken(url, opts.token);
+            style.glyphs = setToken(url, opts.token);
         }
     }
 
@@ -249,16 +265,16 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
 
         if (typeof source.url === 'string') {
             const r = rewriteUrl(source.url, opts);
-            source.url = r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
+            source.url = r.kind === 'allowed' ? r.url : setToken(r.url, opts.token);
         }
         if (typeof source.data === 'string') {
             const r = rewriteUrl(source.data, opts);
-            source.data = r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
+            source.data = r.kind === 'allowed' ? r.url : setToken(r.url, opts.token);
         }
         if (Array.isArray(source.tiles)) {
             source.tiles = (source.tiles as string[]).map((u) => {
                 const r = rewriteUrl(u, opts);
-                return r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
+                return r.kind === 'allowed' ? r.url : setToken(r.url, opts.token);
             });
         }
     }

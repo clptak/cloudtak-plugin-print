@@ -196,6 +196,14 @@ A consequence worth knowing: a large sheet pushes several hundred proxied tile r
 
 The caller's token is forwarded on every permitted request rather than the service minting one, so a user can only print what they can already see.
 
+### Settling a render
+
+**Do not wait on MapLibre's `idle` event.** When every source fails to fetch — an expired token, a blocked host, an unreachable API — MapLibre fires neither `load` nor `idle`, even though `map.loaded()` becomes true within a second or two. Waiting on the event hangs until the timeout on exactly the sheets that most need diagnosing, and anything hung off `load` (installing harvested icons, applying overlay data) silently never happens.
+
+The renderer therefore polls `map.loaded()` and requires two consecutive true readings, because applying overlay data makes the map dirty again and a single reading can catch the quiet moment in between. Measured: a style whose every source fails settles in about 7s this way, against a 60s timeout before.
+
+Tokens in the style are also **replaced, not preserved**. The style is a snapshot of the client's map, and CloudTAK stamps tokens into tile URLs when it builds TileJSON; by the time a harvested job is submitted that token can be hours old. An expired token on every tile URL fails the whole sheet, and Chromium reports the result as an opaque `net::ERR_FAILED`. The caller's token is the authoritative one — and it is only ever applied to CloudTAK's own hosts, never to a third-party basemap.
+
 ### One dev-environment trap
 
 esbuild's `keepNames`, which `tsx` enables, wraps named function expressions in a `__name()` helper. `page.evaluate` serialises its function to a string and runs it in the page, where that helper does not exist — so everything evaluated fails with `__name is not defined` under `npm run dev` and works after `tsc`. A one-line shim is installed via `addInitScript` so dev and production behave identically instead of leaving a trap that appears in only one of them.

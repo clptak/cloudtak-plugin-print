@@ -151,11 +151,30 @@ test('the token is stamped onto rewritten CloudTAK URLs, not sent as a header', 
     assert.match((out.sprite as Array<{ url: string }>)[0].url, /\/api\/iconset\/default\/sprite\?token=tok%20en$/);
 });
 
-test('an existing token in a URL is not doubled up', () => {
-    const { style } = rewriteStyle(base(), { ...OPTS, token: 'new' });
+test('a stale token in a URL is replaced by the caller\'s, not preserved', () => {
+    // The style is a snapshot: CloudTAK stamps tokens into tile URLs when it
+    // builds TileJSON, and by submission time that token may be hours old. An
+    // expired token on every tile URL fails the entire sheet.
+    const { style } = rewriteStyle(base(), { ...OPTS, token: 'fresh' });
 
-    // base() already carries ?token=abc on its glyphs.
-    assert.match(style.glyphs as string, /token=abc$/);
+    // base() carries ?token=abc on its glyphs.
+    assert.match(style.glyphs as string, /token=fresh$/);
+    assert.doesNotMatch(style.glyphs as string, /abc/);
+});
+
+test('replacing a token does not mangle other query parameters', () => {
+    const style = base();
+    style.sources.hosted = {
+        type: 'raster',
+        tiles: ['https://tiles.cloudtak.ccsosar.net/t/{z}/{x}/{y}.png?token=old&ctdarkmode=false'],
+    };
+
+    const { style: out } = rewriteStyle(style, { ...OPTS, token: 'fresh' });
+    const url = (out.sources as Record<string, { tiles: string[] }>).hosted.tiles[0];
+
+    assert.match(url, /ctdarkmode=false/);
+    assert.match(url, /token=fresh/);
+    assert.doesNotMatch(url, /token=old/);
 });
 
 test('a third-party host never receives the CloudTAK token', () => {

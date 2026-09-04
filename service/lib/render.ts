@@ -182,9 +182,10 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             const w = window as unknown as {
                 maplibregl: Record<string, unknown>;
                 __map?: unknown;
-                __ready?: boolean;
+                __prepared?: boolean;
                 __failed?: string;
                 __diag?: Record<string, number>;
+                __t0?: number;
             };
 
             const decode = (image: { data: string; width: number; height: number }): ImageData => {
@@ -197,9 +198,10 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             const pool = new Map<string, HarvestedImage>();
             for (const image of input.images) pool.set(image.id, image);
 
-            const diag = { images: input.images.length, imageMs: 0, styleMs: 0, idleMs: 0 };
+            const diag = { images: input.images.length, imageMs: 0, styleMs: 0, settleMs: 0, errors: 0 };
             const t0 = Date.now();
             w.__diag = diag;
+            w.__t0 = t0;
 
             const MapCtor = w.maplibregl.Map as new (opts: unknown) => {
                 on: (ev: string, cb: (e?: unknown) => void) => void;
@@ -207,6 +209,8 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 addImage: (id: string, image: ImageData, opts?: unknown) => void;
                 hasImage: (id: string) => boolean;
                 getSource: (id: string) => { setData?: (d: unknown) => void } | undefined;
+                isStyleLoaded: () => boolean;
+                loaded: () => boolean;
             };
 
             const map = new MapCtor({
@@ -226,6 +230,35 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
 
             w.__map = map;
 
+            const prepare = async (): Promise<void> => {
+                // Wait for the style, then install images and overlays.
+                //
+                // This used to hang off map.once('load'). When every source fails
+                // to fetch — an expired token, a blocked host, an unreachable API —
+                // MapLibre never fires 'load' or 'idle' at all, even though
+                // map.loaded() goes true. The icons and overlays were then silently
+                // never applied, and the render waited for an event that was never
+                // coming.
+                while (!map.isStyleLoaded()) {
+                    await new Promise((resolve) => {
+                        return setTimeout(resolve, 50);
+                    });
+                }
+
+                diag.styleMs = Date.now() - t0;
+
+                const ti = Date.now();
+                for (const id of pool.keys()) install(id);
+                diag.imageMs = Date.now() - ti;
+
+                for (const overlay of input.overlays) {
+                    const source = map.getSource(overlay.source);
+                    if (source && source.setData) source.setData(overlay.data);
+                }
+
+                w.__prepared = true;
+            };
+
             const install = (id: string): boolean => {
                 const image = pool.get(id);
                 if (!image) return false;
@@ -243,28 +276,17 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             });
 
             map.on('error', (e) => {
-                const err = (e as { error?: Error }).error;
-                // Per-tile failures are normal at the edges of a sheet; a style-level
-                // failure is not, and must not be reported as a successful render.
-                if (err && !(e as { tile?: unknown }).tile) w.__failed = err.message;
-            });
-
-            map.once('load', () => {
-                diag.styleMs = Date.now() - t0;
-                const ti = Date.now();
-                for (const id of pool.keys()) install(id);
-                diag.imageMs = Date.now() - ti;
-
-                for (const overlay of input.overlays) {
-                    const source = map.getSource(overlay.source);
-                    if (source && source.setData) source.setData(overlay.data);
+                const event = e as { error?: Error; tile?: unknown; sourceId?: string };
+                diag.errors++;
+                // A failure attached to a tile or a source is a data problem, and is
+                // reported through the request log instead. Only a style-level error
+                // is fatal — anything else would fail a sheet over one bad tile.
+                if (event.error && !event.tile && !event.sourceId) {
+                    w.__failed = event.error.message;
                 }
             });
 
-            map.on('idle', () => {
-                diag.idleMs = Date.now() - t0;
-                w.__ready = true;
-            });
+            void prepare();
         }, {
             style,
             center: req.center,
@@ -274,14 +296,51 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
         });
 
         try {
+            /*
+             * Settle on map.loaded(), not on the 'idle' event.
+             *
+             * MapLibre does not fire 'load' or 'idle' when every source fails to
+             * fetch, but map.loaded() still becomes true. Waiting on the event
+             * therefore hangs until the timeout on exactly the sheets that most
+             * need a diagnosis. loaded() is also the more direct question: is
+             * there any outstanding work.
+             *
+             * Two consecutive true readings are required because applying overlay
+             * data makes the map dirty again, so a single reading can catch the
+             * quiet moment in between.
+             */
             await page.waitForFunction(
                 () => {
-                    const w = window as unknown as { __ready?: boolean; __failed?: string };
-                    return w.__ready === true || typeof w.__failed === 'string';
+                    const w = window as unknown as {
+                        __prepared?: boolean;
+                        __failed?: string;
+                        __map?: { loaded: () => boolean };
+                        __settledOnce?: boolean;
+                    };
+
+                    if (typeof w.__failed === 'string') return true;
+                    if (!w.__prepared || !w.__map) return false;
+
+                    if (!w.__map.loaded()) {
+                        w.__settledOnce = false;
+                        return false;
+                    }
+
+                    if (!w.__settledOnce) {
+                        w.__settledOnce = true;
+                        return false;
+                    }
+
+                    return true;
                 },
                 undefined,
-                { timeout },
+                { timeout, polling: 250 },
             );
+
+            await page.evaluate(() => {
+                const w = window as unknown as { __diag?: { settleMs: number }; __t0?: number };
+                if (w.__diag && w.__t0) w.__diag.settleMs = Date.now() - w.__t0;
+            });
         } catch {
             // Ask the map what it is still waiting for, and name the oldest
             // outstanding fetches. "Timed out" on its own is not actionable.
@@ -293,14 +352,16 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                         loaded: () => boolean;
                     };
                     __diag?: Record<string, unknown>;
+                    __prepared?: boolean;
                 };
 
-                if (!w.__map) return { styleLoaded: null, tilesLoaded: null, loaded: null, diag: w.__diag };
+                if (!w.__map) return { styleLoaded: null, tilesLoaded: null, loaded: null, prepared: w.__prepared, diag: w.__diag };
 
                 return {
                     styleLoaded: w.__map.isStyleLoaded(),
                     tilesLoaded: w.__map.areTilesLoaded(),
                     loaded: w.__map.loaded(),
+                    prepared: w.__prepared === true,
                     diag: w.__diag,
                 };
             }).catch(() => null);
@@ -318,7 +379,7 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             throw new Err(504, null, [
                 `Render did not settle within ${timeout / 1000}s.`,
                 `requests: ${finished}/${started} finished, ${inflight.size} outstanding, ${failures.length} failed.`,
-                state ? `map: styleLoaded=${state.styleLoaded} tilesLoaded=${state.tilesLoaded} loaded=${state.loaded}.` : '',
+                state ? `map: styleLoaded=${state.styleLoaded} tilesLoaded=${state.tilesLoaded} loaded=${state.loaded} prepared=${state.prepared}.` : '',
                 state && state.diag ? `page: ${JSON.stringify(state.diag)}.` : '',
                 oldest.length ? `oldest outstanding: ${oldest.join(' | ')}` : '',
                 failures.length ? `failures: ${failures.slice(0, 3).join('; ')}` : '',
