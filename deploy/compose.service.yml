@@ -43,5 +43,9 @@
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 4G
+          # SwiftShader is CPU-bound and parallelises, so this is the single
+          # biggest lever on render time — 2.0 cores made a full sheet take four
+          # times longer than the same work on a less constrained machine. Set it
+          # from what the box actually has spare, not from caution.
+          cpus: '8.0'
+          memory: 8G

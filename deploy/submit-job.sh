@@ -25,11 +25,25 @@ process.stdout.write(jwt.sign({ email: "fidelity@local", access: "user" }, proce
 ')
 [ -n "$TOKEN" ] || { echo "could not mint a token — is SigningSecret set in $CONTAINER?" >&2; exit 1; }
 
-echo "submitting $(du -h "$JOB_FILE" | cut -f1) payload..."
+# PROBE=1 renders tiny and fails fast: same style, same sources, 480x320, 60s.
+# For diagnosing a stuck render without paying for a full sheet.
+SEND="$JOB_FILE"
+if [ "${PROBE:-0}" = "1" ]; then
+    SEND=$(mktemp /tmp/print-probe-XXXXXX.json)
+    python3 -c '
+import json, sys
+job = json.load(open(sys.argv[1]))
+job["probe"] = True
+json.dump(job, open(sys.argv[2], "w"))
+' "$JOB_FILE" "$SEND"
+    echo "PROBE MODE — small viewport, 60s timeout, not a usable sheet"
+fi
+
+echo "submitting $(du -h "$SEND" | cut -f1) payload..."
 
 RESP=$(curl -sS -X POST "$BASE/print-api/jobs" \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-    --data-binary @"$JOB_FILE")
+    --data-binary @"$SEND")
 
 ID=$(printf '%s' "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("job",""))' 2>/dev/null || true)
 
