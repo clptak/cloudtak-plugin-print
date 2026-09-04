@@ -20,9 +20,11 @@
     shm_size: '1gb'
     env_file: .env
     environment:
-      - API_URL=http://cloudtak-api:5000
+      # API_URL and PMTILES_URL come from the stack .env and are the PUBLIC URLs.
+      # The service derives the public hostnames from them, so there is nothing
+      # to hand-write and nothing to get wrong.
+      - API_INTERNAL_URL=http://cloudtak-api:5000
       - TILES_INTERNAL_URL=http://cloudtak-tiles:5002
-      - TILES_PUBLIC_HOST=tiles.cloudtak.${PRIMARY_DOMAIN}
       - SigningSecret=${SigningSecret}
       - ASSET_BUCKET=${ASSET_BUCKET}
       - AWS_S3_Endpoint=${AWS_S3_Endpoint}

@@ -13,6 +13,18 @@ function required(name: string): string {
     return value;
 }
 
+/** Accept either a bare hostname or a full URL, and yield the hostname. */
+function hostOf(value?: string): string | undefined {
+    if (!value) return undefined;
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value.replace(/:\d+$/, '');
+
+    try {
+        return new URL(value).hostname;
+    } catch {
+        return undefined;
+    }
+}
+
 function int(name: string, fallback: number): number {
     const raw = process.env[name];
     if (!raw) return fallback;
@@ -29,9 +41,14 @@ export type Config = {
     apiUrl: string;
     /** Tile server, reached on the internal docker network. */
     tilesInternalUrl: string;
-    /** Public tile host as it appears in basemap style documents; rewritten to tilesInternalUrl. */
+    /**
+     * Public hosts as they appear in style documents, derived from CloudTAK's own
+     * API_URL and PMTILES_URL. Deriving them rather than asking for them again
+     * removes a whole class of misconfiguration: these are already correct in the
+     * stack's .env, and a hand-written guess at the hostname silently turns every
+     * internal rewrite into an allowlist rejection.
+     */
     tilesPublicHost: string | undefined;
-    /** Public CloudTAK host as it appears in glyph and sprite URLs. */
     apiPublicHost: string | undefined;
     /**
      * Third-party hosts the renderer may fetch basemap tiles from. Default empty:
@@ -69,10 +86,10 @@ export default function config(): Config {
     cached = {
         port: int('PRINT_PORT', 5010),
         signingSecret: required('SigningSecret'),
-        apiUrl: process.env.API_URL || 'http://cloudtak-api:5000',
+        apiUrl: process.env.API_INTERNAL_URL || 'http://cloudtak-api:5000',
         tilesInternalUrl: process.env.TILES_INTERNAL_URL || 'http://cloudtak-tiles:5002',
-        tilesPublicHost: process.env.TILES_PUBLIC_HOST,
-        apiPublicHost: process.env.API_PUBLIC_HOST,
+        tilesPublicHost: hostOf(process.env.TILES_PUBLIC_HOST || process.env.PMTILES_URL),
+        apiPublicHost: hostOf(process.env.API_PUBLIC_HOST || process.env.API_URL),
         allowHosts: (process.env.PRINT_ALLOW_HOSTS || '')
             .split(',')
             .map((h) => {

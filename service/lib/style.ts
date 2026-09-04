@@ -39,6 +39,15 @@ export type RewriteResult = {
 
 const SPRITE_PROTOCOL = /^cloudtak-sprite:\/\/([^/.@]+)\/?$/;
 
+/**
+ * CloudTAK registers several browser-only MapLibre protocols backed by Dexie.
+ * `cloudtak-sprite://` is translated below; the others cannot be, because the
+ * data behind them exists only in the client's IndexedDB. `cloudtak-tilejson://`
+ * in particular fronts every overlay, so if one reaches the service the plugin
+ * failed to resolve it and the sheet would lose its overlays. That must be loud.
+ */
+const CLIENT_PROTOCOL = /^(cloudtak-[a-z]+):\/\//;
+
 type Classified = { kind: 'api' | 'tiles' | 'allowed' | 'denied'; host: string };
 
 function classify(raw: string, opts: RewriteOptions): Classified {
@@ -137,6 +146,20 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
         if (typeof source.url === 'string') urls.push(source.url);
         if (typeof source.data === 'string') urls.push(source.data);
         if (Array.isArray(source.tiles)) urls.push(...(source.tiles as string[]));
+
+        const clientOnly = urls.find((u) => {
+            return CLIENT_PROTOCOL.test(u) && !SPRITE_PROTOCOL.test(u);
+        });
+
+        if (clientOnly) {
+            dropped.add(id);
+            warnings.push(
+                `source '${id}' omitted: '${CLIENT_PROTOCOL.exec(clientOnly)![1]}://' is a browser-only `
+                + 'protocol backed by the client\'s local database. The plugin must resolve it to '
+                + 'concrete tile URLs before submitting the job.',
+            );
+            continue;
+        }
 
         const denied = urls.filter((u) => {
             return classify(u, opts).kind === 'denied';

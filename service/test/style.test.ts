@@ -104,6 +104,20 @@ test('inline GeoJSON overlays pass through untouched', () => {
     assert.deepEqual((out.sources as Record<string, { data: unknown }>).cot.data, data);
 });
 
+test('an unresolved browser-only protocol is called out by name, not lumped in with bad hosts', () => {
+    const style = base();
+    // Every CloudTAK overlay is fronted by this protocol, resolved from Dexie.
+    style.sources.overlay12 = { type: 'vector', url: 'cloudtak-tilejson://12' };
+    style.layers = [{ id: 'overlay12-line', type: 'line', source: 'overlay12' }];
+
+    const { style: out, warnings } = rewriteStyle(style, OPTS);
+
+    assert.equal(Object.keys(out.sources as object).length, 0);
+    assert.equal((out.layers as unknown[]).length, 0);
+    assert.match(warnings[0], /'cloudtak-tilejson:\/\/' is a browser-only protocol/);
+    assert.match(warnings[0], /plugin must resolve it/);
+});
+
 test('the input style is not mutated', () => {
     const style = base();
     const before = JSON.stringify(style);

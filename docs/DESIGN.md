@@ -182,13 +182,17 @@ Three things in CloudTAK's live style only work inside a browser tab, and each n
 
 **Most CoT icons are not in any sprite.** CloudTAK resolves them lazily through a `styleimagemissing` handler that reads Dexie per icon id. Reimplementing that resolver server-side would mean guessing at the same bitmap. Instead the plugin harvests the images from the live map (`map.listImages()` / `map.getImage()`) and ships them with the job as base64 RGBA; the service replays them with `map.addImage()`, both up front and from its own `styleimagemissing` handler. What prints is then literally the bitmap the user was looking at.
 
-**Glyphs and tiles point at public hostnames.** Rewritten to the internal service addresses so a thousand requests per sheet stay on the docker network.
+**Glyphs and tiles point at public hostnames.** Rewritten to the internal service addresses so a thousand requests per sheet stay on the docker network. The public hostnames are derived from CloudTAK's own `API_URL` and `PMTILES_URL` rather than configured again — a hand-written guess at the hostname silently turns every internal rewrite into an allowlist rejection.
+
+**Overlays are fronted by a third browser-only protocol.** Overlay sources are `cloudtak-tilejson://<id>`, resolved from Dexie (`api/web/src/stores/modules/tilejson.ts`). Unlike sprites there is no server-side equivalent, so **the plugin must resolve these to concrete tile URLs before submitting**. If one reaches the service it is dropped with a warning naming the protocol, because silently losing every overlay on a printed sheet is the worst available outcome.
 
 ### The allowlist is enforced twice, on purpose
 
 `lib/style.ts` drops sources whose host is not allowed and records a warning. That alone is not sufficient: **a TileJSON document fetched from an allowed host can name tile URLs pointing anywhere**, and nothing in the submitted style would reveal it. So `lib/render.ts` also enforces the same allowlist inside the browser, on every request, aborting anything else and reporting it on the job.
 
-The allowlist is the internal services plus hosts named explicitly in `PRINT_ALLOW_HOSTS`. It defaults to **empty**, so external basemaps do not render until someone lists their host. Non-http schemes are refused outright, and suffix matching is anchored so `basemap.nationalmap.gov.evil.com` cannot pass as a subdomain of an allowed host.
+The allowlist is the internal services plus hosts named explicitly in `PRINT_ALLOW_HOSTS`, and in practice it stays **empty**. That is not a limitation: CloudTAK already proxies every non-hosted basemap through its own API. From `api/stateless/lib/tilejson.ts`, a basemap's tile URL stays its own only when it is on the PMTiles host; otherwise it becomes `${API_URL}/api/basemap/:id/tiles/{z}/{x}/{y}`. So the browser fetches `cloudtak-api`, and `cloudtak-api` fetches Caltopo, Google, ArcGIS, USGS and the rest. Adding those hosts here would widen the SSRF surface for no gain.
+
+A consequence worth knowing: a large sheet pushes several hundred proxied tile requests through `cloudtak-api`, the same container serving live users. `PRINT_CONCURRENCY=1` bounds it, and it is the reason concurrency should not be raised casually. Non-http schemes are refused outright, and suffix matching is anchored so `basemap.nationalmap.gov.evil.com` cannot pass as a subdomain of an allowed host.
 
 The caller's token is forwarded on every permitted request rather than the service minting one, so a user can only print what they can already see.
 
