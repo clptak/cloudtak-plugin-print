@@ -12,7 +12,7 @@
 set -euo pipefail
 
 JOB_FILE=${1:?usage: submit-job.sh <print-job.json> [output.png]}
-OUT=${2:-./sheet.png}
+OUT=${2:-./sheet.pdf}
 BASE=${BASE:-http://127.0.0.1:5010}
 CONTAINER=${PRINT_CONTAINER:-cloudtak-print}
 
@@ -25,17 +25,32 @@ process.stdout.write(jwt.sign({ email: "fidelity@local", access: "user" }, proce
 ')
 [ -n "$TOKEN" ] || { echo "could not mint a token — is SigningSecret set in $CONTAINER?" >&2; exit 1; }
 
+# FORMAT=png returns the bare map raster instead of the composed sheet, for
+# looking at the render without the page layout in the way.
+SEND="$JOB_FILE"
+if [ -n "${FORMAT:-}" ]; then
+    NEXT=$(mktemp /tmp/print-fmt-XXXXXX.json)
+    python3 -c '
+import json, sys
+job = json.load(open(sys.argv[1]))
+job["format"] = sys.argv[3]
+json.dump(job, open(sys.argv[2], "w"))
+' "$SEND" "$NEXT" "$FORMAT"
+    SEND="$NEXT"
+    echo "FORMAT=$FORMAT"
+fi
+
 # PROBE=1 renders tiny and fails fast: same style, same sources, 480x320, 60s.
 # For diagnosing a stuck render without paying for a full sheet.
-SEND="$JOB_FILE"
 if [ "${PROBE:-0}" = "1" ]; then
-    SEND=$(mktemp /tmp/print-probe-XXXXXX.json)
+    PROBE_FILE=$(mktemp /tmp/print-probe-XXXXXX.json)
     python3 -c '
 import json, sys
 job = json.load(open(sys.argv[1]))
 job["probe"] = True
 json.dump(job, open(sys.argv[2], "w"))
-' "$JOB_FILE" "$SEND"
+' "$SEND" "$PROBE_FILE"
+    SEND="$PROBE_FILE"
     echo "PROBE MODE — small viewport, 60s timeout, not a usable sheet"
 fi
 

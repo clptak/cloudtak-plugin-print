@@ -34,6 +34,12 @@ export const PrintRequest = Type.Object({
      */
     probe: Type.Optional(Type.Boolean()),
 
+    /**
+     * 'pdf' is the deliverable; 'png' returns the bare map raster and exists for
+     * debugging the render without the page layout in the way.
+     */
+    format: Type.Optional(Type.Union([Type.Literal('pdf'), Type.Literal('png')])),
+
     /** MapLibre style document, exactly as the client currently has it. */
     style: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 

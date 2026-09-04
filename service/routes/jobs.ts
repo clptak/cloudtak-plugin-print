@@ -8,6 +8,7 @@ import { sheet, footprint } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
 import { zoomForScale, bboxCenter, scaleForBBox, snapScale, type BBox } from '../lib/geo.js';
 import { renderMap } from '../lib/render.js';
+import { composeSheet } from '../lib/sheet.js';
 import { smokeRender } from '../lib/browser.js';
 import type { Queue, JobRecord } from '../lib/queue.js';
 
@@ -71,6 +72,9 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
             // exercise the same style and sources as cheaply as possible.
             const probe = body.probe === true;
 
+            // A probe is for diagnosing the render, so it never gets a page layout.
+            const format = probe ? 'png' : (body.format ?? 'pdf');
+
             const resolution = resolve({
                 frameInches: geometry.frame,
                 requestedDpi: body.dpi,
@@ -100,13 +104,29 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 if (!style) {
                     ctx.progress(0.1, 'no style supplied, rendering test pattern');
 
+                    const pattern = await smokeRender({
+                        width: resolution.css.width,
+                        height: resolution.css.height,
+                        scale: resolution.deviceScale,
+                    });
+
+                    if (format === 'png') return { body: pattern, contentType: 'image/png' };
+
                     return {
-                        body: await smokeRender({
-                            width: resolution.css.width,
-                            height: resolution.css.height,
-                            scale: resolution.deviceScale,
+                        body: await composeSheet({
+                            map: pattern,
+                            sheet: geometry.sheet,
+                            frame: geometry.frame,
+                            meta: {
+                                title: body.title,
+                                incident: body.incident,
+                                author: body.author,
+                                scale,
+                                generated: new Date().toISOString(),
+                                dpi: resolution.dpi,
+                            },
                         }),
-                        contentType: 'image/png',
+                        contentType: 'application/pdf',
                     };
                 }
 
@@ -135,9 +155,31 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                     },
                 });
 
+                if (format === 'png') {
+                    ctx.progress(1, 'complete');
+                    return { body: result.png, contentType: 'image/png', warnings: result.warnings };
+                }
+
+                ctx.progress(0.85, 'composing sheet');
+
+                const pdf = await composeSheet({
+                    map: result.png,
+                    sheet: geometry.sheet,
+                    frame: geometry.frame,
+                    meta: {
+                        title: body.title,
+                        incident: body.incident,
+                        author: body.author,
+                        scale,
+                        generated: new Date().toISOString(),
+                        dpi: resolution.dpi,
+                        warnings: result.warnings,
+                    },
+                });
+
                 ctx.progress(1, 'complete');
 
-                return { body: result.png, contentType: 'image/png', warnings: result.warnings };
+                return { body: pdf, contentType: 'application/pdf', warnings: result.warnings };
             }, derived);
 
             res.status(202).json(present(job));

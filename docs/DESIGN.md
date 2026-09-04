@@ -381,7 +381,15 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    on 2026-09-04 against a live CloudTAK style: vector basemap, hillshade,
    contours, raster overlays, glyph labels, harvested CoT icons and cell-site
    overlays all rendered headless from a browser-harvested payload.
-3. Page layout — `@page`, map frame, title block. First real PDF.
+3. ~~Page layout — `@page`, map frame, title block. First real PDF.~~ **Done.**
+   `lib/sheet.ts` composes the sheet as HTML and prints it with Chromium's
+   `page.pdf()`, so the title block and neatline are vector while only the map
+   imagery is raster. `@page { size: <W>in <H>in }` with `preferCSSPageSize`
+   makes the paper size literal — nothing scales between the map's ground
+   resolution and the paper, so a printed inch really is `scale` inches on the
+   ground. Verified: an 11x17 request produces a PDF whose MediaBox is exactly
+   11.00in x 17.00in. A sheet rendered with failures is stamped INCOMPLETE on the
+   page itself, because a field team holding paper cannot see the job status.
 4. UTM grid engine, zone-aware, with edge labels.
 5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.
 6. Remaining furniture — scale bar, north arrow, declination, branding, legend.
