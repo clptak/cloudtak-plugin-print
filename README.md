@@ -43,6 +43,19 @@ docker compose build cloudtak-print
 docker compose up -d cloudtak-print
 ```
 
+If the build fails at `playwright install` with a download error, the network
+blocks Playwright's browser CDN. Build against the distro Chromium instead:
+
+```sh
+docker compose build \
+  --build-arg CHROMIUM_SOURCE=distro \
+  --build-arg CHROMIUM_PATH=/usr/bin/chromium \
+  cloudtak-print
+```
+
+`deploy/VPS-TESTING.md` is the full runbook for bringing this up on the VPS
+without exposing it.
+
 ## Verifying the render path
 
 The one genuine unknown is whether Chromium under SwiftShader gives MapLibre a working GL context on your box. Two endpoints answer that without involving tiles, styles, or CloudTAK auth, so a failure is unambiguously a Chromium problem:
