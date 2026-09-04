@@ -126,3 +126,46 @@ test('the input style is not mutated', () => {
 
     assert.equal(JSON.stringify(style), before);
 });
+
+test('the sprite declaration is dropped when harvested images are supplied', () => {
+    // Every image the sheet would provide has already been added directly, so
+    // fetching it is a redundant request that can only cost time or fail.
+    const { style } = rewriteStyle(base(), { ...OPTS, hasImages: true });
+
+    assert.equal(style.sprite, undefined);
+});
+
+test('the token is stamped onto rewritten CloudTAK URLs, not sent as a header', () => {
+    const style = base();
+    delete (style as { glyphs?: string }).glyphs;
+    style.glyphs = 'https://cloudtak.ccsosar.net/api/fonts/{fontstack}/{range}.pbf';
+    style.sources.hosted = {
+        type: 'vector',
+        tiles: ['https://tiles.cloudtak.ccsosar.net/tiles/public/a/tiles/{z}/{x}/{y}.mvt'],
+    };
+
+    const { style: out } = rewriteStyle(style, { ...OPTS, token: 'tok en' });
+
+    assert.match(out.glyphs as string, /token=tok%20en$/);
+    assert.match((out.sources as Record<string, { tiles: string[] }>).hosted.tiles[0], /token=tok%20en$/);
+    assert.match((out.sprite as Array<{ url: string }>)[0].url, /\/api\/iconset\/default\/sprite\?token=tok%20en$/);
+});
+
+test('an existing token in a URL is not doubled up', () => {
+    const { style } = rewriteStyle(base(), { ...OPTS, token: 'new' });
+
+    // base() already carries ?token=abc on its glyphs.
+    assert.match(style.glyphs as string, /token=abc$/);
+});
+
+test('a third-party host never receives the CloudTAK token', () => {
+    const style = base();
+    style.sources.usgs = { type: 'raster', tiles: ['https://basemap.nationalmap.gov/{z}/{y}/{x}'] };
+
+    const { style: out } = rewriteStyle(style, { ...OPTS, token: 'secret' });
+
+    assert.equal(
+        (out.sources as Record<string, { tiles: string[] }>).usgs.tiles[0],
+        'https://basemap.nationalmap.gov/{z}/{y}/{x}',
+    );
+});

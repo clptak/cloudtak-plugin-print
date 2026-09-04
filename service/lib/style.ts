@@ -29,6 +29,23 @@ export type RewriteOptions = {
     tilesPublicHost?: string;
     /** Additional hosts the renderer may fetch from, for third-party basemaps. */
     allowHosts?: string[];
+    /**
+     * Caller's CloudTAK token, stamped onto rewritten CloudTAK URLs as a query
+     * parameter — the way CloudTAK does it for glyphs.
+     *
+     * Deliberately NOT sent as an Authorization header: the render page has its
+     * own origin, so every request to cloudtak-api is cross-origin, and adding an
+     * Authorization header turns a simple GET into a preflighted one. That is a
+     * self-inflicted CORS failure, and it surfaces as an opaque status 0.
+     */
+    token?: string;
+    /**
+     * True when the job ships harvested sprite images. The style's `sprite`
+     * declaration is then removed: every image it would have provided has already
+     * been supplied via addImage, so fetching the sheet is a redundant request
+     * that can only fail.
+     */
+    hasImages?: boolean;
 };
 
 export type RewriteResult = {
@@ -96,15 +113,24 @@ function rewriteUrl(raw: string, opts: RewriteOptions): { url: string; kind: Cla
     return { url: parsed.toString().replace(/%7B/g, '{').replace(/%7D/g, '}'), kind };
 }
 
+function withToken(url: string, token?: string): string {
+    if (!token || url.includes('token=')) return url;
+    return url + (url.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
+}
+
 function rewriteSprite(sprite: unknown, opts: RewriteOptions): unknown {
     const one = (entry: string): string => {
         const match = SPRITE_PROTOCOL.exec(entry);
         if (match) {
             // The client's own cache-miss path fetches /api/iconset/<id>/sprite.json,
             // so this is the documented fallback rather than an invented endpoint.
-            return `${opts.apiInternalUrl.replace(/\/$/, '')}/api/iconset/${match[1]}/sprite`;
+            // MapLibre appends .json/.png and an @2x suffix itself.
+            return withToken(
+                `${opts.apiInternalUrl.replace(/\/$/, '')}/api/iconset/${match[1]}/sprite`,
+                opts.token,
+            );
         }
-        return rewriteUrl(entry, opts).url;
+        return withToken(rewriteUrl(entry, opts).url, opts.token);
     };
 
     if (typeof sprite === 'string') return one(sprite);
@@ -123,7 +149,15 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
     const warnings: string[] = [];
     const style: StyleDocument = structuredClone(input);
 
-    if (style.sprite) style.sprite = rewriteSprite(style.sprite, opts);
+    if (style.sprite) {
+        if (opts.hasImages) {
+            // Every image the sheet would have provided is already being supplied
+            // directly, so this fetch can only cost time or fail.
+            delete style.sprite;
+        } else {
+            style.sprite = rewriteSprite(style.sprite, opts);
+        }
+    }
 
     if (typeof style.glyphs === 'string') {
         const { url, kind } = rewriteUrl(style.glyphs, opts);
@@ -131,7 +165,7 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
             warnings.push(`glyphs host not allowed, labels will not render: ${style.glyphs}`);
             delete style.glyphs;
         } else {
-            style.glyphs = url;
+            style.glyphs = withToken(url, opts.token);
         }
     }
 
@@ -171,11 +205,18 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
             continue;
         }
 
-        if (typeof source.url === 'string') source.url = rewriteUrl(source.url, opts).url;
-        if (typeof source.data === 'string') source.data = rewriteUrl(source.data, opts).url;
+        if (typeof source.url === 'string') {
+            const r = rewriteUrl(source.url, opts);
+            source.url = r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
+        }
+        if (typeof source.data === 'string') {
+            const r = rewriteUrl(source.data, opts);
+            source.data = r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
+        }
         if (Array.isArray(source.tiles)) {
             source.tiles = (source.tiles as string[]).map((u) => {
-                return rewriteUrl(u, opts).url;
+                const r = rewriteUrl(u, opts);
+                return r.kind === 'allowed' ? r.url : withToken(r.url, opts.token);
             });
         }
     }

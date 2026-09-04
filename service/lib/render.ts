@@ -99,7 +99,11 @@ function permitted(request: PWRequest, allow: string[]): boolean {
  * same allowlist on every request. Anything else is aborted and reported.
  */
 export async function renderMap(req: RenderRequest): Promise<RenderResult> {
-    const { style, warnings } = rewriteStyle(req.style, req.rewrite);
+    const { style, warnings } = rewriteStyle(req.style, {
+        ...req.rewrite,
+        token: req.token,
+        hasImages: !!(req.images && req.images.length),
+    });
 
     const allow = allowedHosts(req.rewrite);
     const blocked = new Set<string>();
@@ -118,18 +122,26 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 return route.abort('blockedbyclient');
             }
 
-            // Forward the caller's identity rather than minting one, so a user can
-            // only print what they can already see.
-            return route.continue({
-                headers: req.token
-                    ? { ...request.headers(), authorization: `Bearer ${req.token}` }
-                    : request.headers(),
-            });
+            // Continue unmodified. The caller's token travels in the URL query,
+            // stamped on during style rewriting — the same way CloudTAK does it.
+            // Adding an Authorization header here would make every cross-origin GET
+            // preflighted, which fails opaquely as status 0.
+            return route.continue();
         });
 
         const errors: string[] = [];
         page.on('pageerror', (err) => {
             errors.push(err.message);
+        });
+
+        // MapLibre reports a failed fetch as status 0 with no reason, which is
+        // indistinguishable between CORS, abort and connection refused. Chromium
+        // knows which it was, so capture it.
+        const failures: string[] = [];
+        page.on('requestfailed', (request) => {
+            const reason = request.failure()?.errorText ?? 'unknown';
+            if (reason === 'net::ERR_ABORTED') return; // our own allowlist, already reported
+            failures.push(`${reason} <- ${request.url()}`);
         });
 
         await page.evaluate(async (input: {
@@ -239,7 +251,16 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             return (window as unknown as { __failed?: string }).__failed;
         });
 
-        if (failure) throw new Err(502, null, `MapLibre failed to load the style: ${failure}`);
+        if (failure) {
+            const detail = failures.length ? ` (${failures.slice(0, 3).join('; ')})` : '';
+            throw new Err(502, null, `MapLibre failed to load the style: ${failure}${detail}`);
+        }
+
+        if (failures.length) {
+            warnings.push(...failures.slice(0, 10).map((f) => {
+                return `request failed: ${f}`;
+            }));
+        }
         if (errors.length) throw new Err(502, null, `Render page error: ${errors[0]}`);
 
         return page.locator('#map').screenshot({ type: 'png' });
