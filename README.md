@@ -4,8 +4,6 @@ Generate print-quality PDF maps from CloudTAK — basemap plus live operational
 overlays — at a chosen scale on a standard American sheet, for use in the field
 with a map, compass, and UTM grid tool.
 
-Modeled on Caltopo's print feature.
-
 > **This repo is not shaped like the other `cloudtak-plugin-*` repos.**
 > It contains both a client-side plugin *and* a Docker service, so the symlink
 > into CloudTAK points at `plugin/`, not at the repo root. See below.
