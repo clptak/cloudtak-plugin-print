@@ -6,6 +6,8 @@ import config from '../lib/config.js';
 import { PrintRequest, JobStatus } from '../lib/types.js';
 import { sheet, footprint } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
+import { zoomForScale, bboxCenter, scaleForBBox, snapScale, type BBox } from '../lib/geo.js';
+import { renderMap } from '../lib/render.js';
 import { smokeRender } from '../lib/browser.js';
 import type { Queue, JobRecord } from '../lib/queue.js';
 
@@ -18,6 +20,7 @@ function present(job: JobRecord) {
         created: job.created,
         error: job.error,
         sheet: job.sheet,
+        warnings: job.warnings,
     };
 }
 
@@ -33,7 +36,8 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
         res: JobStatus,
     }, async (req, res) => {
         try {
-            const token = auth(tokenFrom(req.headers as Record<string, unknown>, req.query as Record<string, unknown>));
+            const raw = tokenFrom(req.headers as Record<string, unknown>, req.query as Record<string, unknown>);
+            const token = auth(raw);
 
             const body = req.body;
 
@@ -46,13 +50,23 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
 
             const c = config();
 
-            // Paper + margins + scale fully determine the ground rectangle.
             const geometry = sheet(body.paper.size, body.paper.orientation);
-            const ground = footprint(body.paper.size, body.paper.orientation, body.scale);
+
+            // Fit-to-area derives the scale from the drawn rectangle and snaps it UP
+            // to a standard value, so the whole drawn area stays on the sheet.
+            // Scale-first uses the scale as given; the box is only a placement.
+            const scale = body.bbox
+                ? snapScale(scaleForBBox(body.bbox as BBox, geometry.frame))
+                : body.scale;
+
+            const center = body.bbox
+                ? bboxCenter(body.bbox as BBox)
+                : body.center as [number, number];
+
+            const ground = footprint(body.paper.size, body.paper.orientation, scale);
 
             // DPI is clamped, not rejected. The binding constraint is the GL texture
-            // limit — 8192 under SwiftShader — applied to the backing store, which is
-            // why a large sheet comes back at a lower resolution than requested.
+            // limit — 8192 under SwiftShader — applied to the backing store.
             const resolution = resolve({
                 frameInches: geometry.frame,
                 requestedDpi: body.dpi,
@@ -61,30 +75,61 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 maxTexture: c.maxTexture,
             });
 
+            // Scale is exact at the sheet's centre latitude; see lib/geo.ts.
+            const zoom = zoomForScale(scale, c.layoutDpi, center[1]);
+
             const derived = {
                 frameInches: { width: geometry.frame.width, height: geometry.frame.height },
                 groundMetres: { width: Math.round(ground.width), height: Math.round(ground.height) },
                 dpi: resolution.dpi,
                 pixels: resolution.pixels,
                 clampedBy: resolution.clampedBy,
+                scale,
+                zoom: Number(zoom.toFixed(4)),
             };
 
-            const job = cfg.queue.submit(token.email, async (ctx) => {
-                // PHASE 1: this proves the plumbing — queue, Chromium, sizing, and the
-                // DPI/layout maths — using the dependency-free smoke map. Phase 2
-                // replaces this body with the real style + overlay render, and phase 3
-                // wraps it in the page layout and emits a PDF instead of a PNG.
-                ctx.progress(0.1, 'launching renderer');
+            const style = body.style;
 
-                const png = await smokeRender({
+            const job = cfg.queue.submit(token.email, async (ctx) => {
+                // PHASE 3 replaces this with the page layout and a PDF; for now the
+                // artifact is the map raster alone.
+                if (!style) {
+                    ctx.progress(0.1, 'no style supplied, rendering test pattern');
+
+                    return {
+                        body: await smokeRender({
+                            width: resolution.css.width,
+                            height: resolution.css.height,
+                            scale: resolution.deviceScale,
+                        }),
+                        contentType: 'image/png',
+                    };
+                }
+
+                ctx.progress(0.1, 'rendering map');
+
+                const result = await renderMap({
                     width: resolution.css.width,
                     height: resolution.css.height,
                     scale: resolution.deviceScale,
+                    style,
+                    center,
+                    zoom,
+                    images: body.images,
+                    overlays: body.overlays,
+                    token: raw,
+                    rewrite: {
+                        apiInternalUrl: c.apiUrl,
+                        tilesInternalUrl: c.tilesInternalUrl,
+                        apiPublicHost: c.apiPublicHost,
+                        tilesPublicHost: c.tilesPublicHost,
+                        allowHosts: c.allowHosts,
+                    },
                 });
 
                 ctx.progress(1, 'complete');
 
-                return { body: png, contentType: 'image/png' };
+                return { body: result.png, contentType: 'image/png', warnings: result.warnings };
             }, derived);
 
             res.status(202).json(present(job));
@@ -97,12 +142,8 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
         name: 'Job Status',
         group: 'Jobs',
         description: 'Poll a print job',
-        params: Type.Object({
-            id: Type.String(),
-        }),
-        query: Type.Object({
-            token: Type.Optional(Type.String()),
-        }),
+        params: Type.Object({ id: Type.String() }),
+        query: Type.Object({ token: Type.Optional(Type.String()) }),
         res: JobStatus,
     }, async (req, res) => {
         try {
@@ -121,12 +162,8 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
         name: 'Job Result',
         group: 'Jobs',
         description: 'Download the rendered artifact',
-        params: Type.Object({
-            id: Type.String(),
-        }),
-        query: Type.Object({
-            token: Type.Optional(Type.String()),
-        }),
+        params: Type.Object({ id: Type.String() }),
+        query: Type.Object({ token: Type.Optional(Type.String()) }),
     }, async (req, res) => {
         try {
             const token = auth(tokenFrom(req.headers as Record<string, unknown>, req.query as Record<string, unknown>));

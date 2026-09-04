@@ -31,6 +31,14 @@ export type Config = {
     tilesInternalUrl: string;
     /** Public tile host as it appears in basemap style documents; rewritten to tilesInternalUrl. */
     tilesPublicHost: string | undefined;
+    /** Public CloudTAK host as it appears in glyph and sprite URLs. */
+    apiPublicHost: string | undefined;
+    /**
+     * Third-party hosts the renderer may fetch basemap tiles from. Default empty:
+     * a headless renderer that fetches arbitrary URLs from inside the docker
+     * network is an SSRF engine, so external basemaps must be named explicitly.
+     */
+    allowHosts: string[];
     assetBucket: string;
     /** Concurrent render jobs. Deliberately 1 by default; see docs/DESIGN.md section 9. */
     concurrency: number;
@@ -64,6 +72,13 @@ export default function config(): Config {
         apiUrl: process.env.API_URL || 'http://cloudtak-api:5000',
         tilesInternalUrl: process.env.TILES_INTERNAL_URL || 'http://cloudtak-tiles:5002',
         tilesPublicHost: process.env.TILES_PUBLIC_HOST,
+        apiPublicHost: process.env.API_PUBLIC_HOST,
+        allowHosts: (process.env.PRINT_ALLOW_HOSTS || '')
+            .split(',')
+            .map((h) => {
+                return h.trim();
+            })
+            .filter(Boolean),
         assetBucket: process.env.ASSET_BUCKET || '',
         concurrency: int('PRINT_CONCURRENCY', 1),
         maxDpi: int('PRINT_MAX_DPI', 200),

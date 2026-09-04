@@ -30,8 +30,25 @@ export const PrintRequest = Type.Object({
     /** MapLibre style document, exactly as the client currently has it. */
     style: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
 
-    /** Overlay FeatureCollections, in draw order. */
-    overlays: Type.Optional(Type.Array(Type.Record(Type.String(), Type.Unknown()))),
+    /**
+     * Sprite images harvested from the client's live map. CloudTAK resolves most
+     * CoT icons lazily from Dexie, so without these the sheet renders with
+     * missing icons. Base64 RGBA, width * height * 4 bytes.
+     */
+    images: Type.Optional(Type.Array(Type.Object({
+        id: Type.String(),
+        width: Type.Integer({ minimum: 1, maximum: 1024 }),
+        height: Type.Integer({ minimum: 1, maximum: 1024 }),
+        data: Type.String(),
+        pixelRatio: Type.Optional(Type.Number({ minimum: 1, maximum: 4 })),
+        sdf: Type.Optional(Type.Boolean()),
+    }))),
+
+    /** Feature data to apply to named style sources after load. */
+    overlays: Type.Optional(Type.Array(Type.Object({
+        source: Type.String(),
+        data: Type.Record(Type.String(), Type.Unknown()),
+    }))),
 
     furniture: Type.Optional(Type.Object({
         grid: Type.Optional(Type.Union([Type.Literal('utm'), Type.Literal('none')])),
@@ -55,6 +72,10 @@ export const SheetGeometry = Type.Object({
     pixels: Type.Object({ width: Type.Integer(), height: Type.Integer() }),
     /** Why the requested DPI was lowered, if it was. */
     clampedBy: Type.Union([Type.Literal('none'), Type.Literal('ceiling'), Type.Literal('texture')]),
+    /** Effective scale denominator — computed in fit-to-area mode, echoed otherwise. */
+    scale: Type.Integer(),
+    /** MapLibre zoom the renderer used, exact at the sheet's centre latitude. */
+    zoom: Type.Number(),
 });
 
 export type SheetGeometryType = Static<typeof SheetGeometry>;
@@ -72,6 +93,8 @@ export const JobStatus = Type.Object({
     created: Type.String(),
     error: Type.Optional(Type.String()),
     sheet: Type.Optional(SheetGeometry),
+    /** Sources dropped or requests blocked. A blank map is never silent. */
+    warnings: Type.Optional(Type.Array(Type.String())),
     /** Presigned URL to the finished artifact. Absent until complete. */
     url: Type.Optional(Type.String()),
 });

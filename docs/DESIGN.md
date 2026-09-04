@@ -102,7 +102,8 @@ POST /print-api/jobs
   "bbox": null,                          // fit-to-area mode (mutually exclusive)
   "dpi": 200,
   "style": { /* MapLibre style JSON as the client has it */ },
-  "overlays": [ /* GeoJSON FeatureCollections, in draw order */ ],
+  "images": [ /* sprite images harvested from the live map, base64 RGBA */ ],
+  "overlays": [ { "source": "cot", "data": { /* FeatureCollection */ } } ],
   "furniture": {
     "grid": "utm",
     "legend": true,
@@ -337,8 +338,9 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
 
 ## 10. Phasing
 
-1. Service skeleton — JWT verification, job queue, Chromium boot, health check.
-2. Map render only — style + overlays to PNG at a fixed size. Prove fidelity against the client.
+1. ~~Service skeleton — JWT verification, job queue, Chromium boot, health check.~~ **Done.**
+2. ~~Map render only — style + overlays to PNG at a fixed size.~~ **Done**, pending
+   fidelity comparison against the client on a real vector basemap.
 3. Page layout — `@page`, map frame, title block. First real PDF.
 4. UTM grid engine, zone-aware, with edge labels.
 5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.

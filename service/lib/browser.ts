@@ -111,6 +111,19 @@ export async function withPage<T>(opts: PageSize, fn: (page: Page) => Promise<T>
         deviceScaleFactor: opts.scale ?? 1,
     });
 
+    /**
+     * esbuild's `keepNames` — which tsx enables — wraps named function
+     * expressions in a `__name()` helper. page.evaluate serialises the function
+     * to a string and runs it in the page, where that helper does not exist, so
+     * anything evaluated fails with "__name is not defined" under `npm run dev`
+     * but works after `tsc`. Shimming it keeps dev and production identical
+     * rather than leaving a trap that only appears in one of them.
+     */
+    await context.addInitScript(() => {
+        const w = window as unknown as { __name?: (fn: unknown) => unknown };
+        if (!w.__name) w.__name = (fn: unknown) => fn;
+    });
+
     try {
         return await fn(await context.newPage());
     } finally {

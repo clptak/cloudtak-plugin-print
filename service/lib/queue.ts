@@ -13,7 +13,11 @@ export type JobContext = {
     progress: (fraction: number, step?: string) => void;
 };
 
-export type JobWorker = (ctx: JobContext) => Promise<{ body: Buffer; contentType: string }>;
+export type JobWorker = (ctx: JobContext) => Promise<{
+    body: Buffer;
+    contentType: string;
+    warnings?: string[];
+}>;
 
 /**
  * In-process job queue. No Redis: at PRINT_CONCURRENCY=1 a queue is a promise
@@ -97,6 +101,7 @@ export class Queue {
             });
 
             job.artifact = artifact;
+            if (artifact.warnings?.length) job.warnings = artifact.warnings;
             job.status = 'complete';
             job.progress = 1;
         } catch (err) {
