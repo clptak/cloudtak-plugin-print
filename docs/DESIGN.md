@@ -1,6 +1,6 @@
 # cloudtak-plugin-print — Design
 
-PDF map generation for CloudTAK, modeled on Caltopo's print feature.
+PDF map generation for CloudTAK.
 
 Status: **design draft**. Sections marked **OPEN** are proposed defaults awaiting review.
 
