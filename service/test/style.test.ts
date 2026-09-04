@@ -169,3 +169,38 @@ test('a third-party host never receives the CloudTAK token', () => {
         'https://basemap.nationalmap.gov/{z}/{y}/{x}',
     );
 });
+
+test('tokens are never echoed into warnings', () => {
+    const style = base();
+    style.glyphs = 'https://elsewhere.example.com/fonts/{fontstack}/{range}.pbf?token=SUPERSECRET';
+    style.sources.tiles = {
+        type: 'vector',
+        tiles: ['https://elsewhere.example.com/{z}/{x}/{y}.mvt?token=SUPERSECRET&x=1'],
+    };
+
+    const { warnings } = rewriteStyle(style, OPTS);
+
+    for (const warning of warnings) {
+        assert.doesNotMatch(warning, /SUPERSECRET/, warning);
+    }
+    assert.match(warnings[0], /token=<redacted>/);
+});
+
+test('a dropped source says so is a config problem when the public hosts are unset', () => {
+    const style = base();
+    style.sources.cloudtak = { type: 'vector', tiles: ['https://map.example.com/{z}/{x}/{y}.mvt'] };
+
+    const bare = { apiInternalUrl: OPTS.apiInternalUrl, tilesInternalUrl: OPTS.tilesInternalUrl };
+    const { warnings } = rewriteStyle(style, bare);
+
+    assert.match(warnings.join('\n'), /API_URL and PMTILES_URL/);
+});
+
+test('no configuration hint is added once the public hosts resolve', () => {
+    const style = base();
+    style.sources.sketchy = { type: 'raster', tiles: ['https://evil.example.com/{z}/{x}/{y}.png'] };
+
+    const { warnings } = rewriteStyle(style, OPTS);
+
+    assert.doesNotMatch(warnings.join('\n'), /API_URL and PMTILES_URL/);
+});

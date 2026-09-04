@@ -65,6 +65,15 @@ const SPRITE_PROTOCOL = /^cloudtak-sprite:\/\/([^/.@]+)\/?$/;
  */
 const CLIENT_PROTOCOL = /^(cloudtak-[a-z]+):\/\//;
 
+/**
+ * Warnings travel to the job status, the container log and whatever the operator
+ * pastes into a chat window, so a URL carrying a session token must never appear
+ * in one verbatim.
+ */
+export function redact(url: string): string {
+    return url.replace(/([?&](?:token|access_token|api_key|key)=)[^&\s]+/gi, '$1<redacted>');
+}
+
 type Classified = { kind: 'api' | 'tiles' | 'allowed' | 'denied'; host: string };
 
 function classify(raw: string, opts: RewriteOptions): Classified {
@@ -145,6 +154,18 @@ function rewriteSprite(sprite: unknown, opts: RewriteOptions): unknown {
     return sprite;
 }
 
+/**
+ * When the public hostnames are unset, every CloudTAK URL looks like a stranger's
+ * and the whole style is dropped. That is a configuration error, not a security
+ * event, and it should say so rather than reading as a blocked attack.
+ */
+function hint(opts: RewriteOptions): string {
+    if (opts.apiPublicHost || opts.tilesPublicHost) return '';
+
+    return '. NOTE: neither API_PUBLIC_HOST nor TILES_PUBLIC_HOST resolved — the service '
+        + 'derives them from CloudTAK\'s API_URL and PMTILES_URL, so check those reach the container';
+}
+
 export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): RewriteResult {
     const warnings: string[] = [];
     const style: StyleDocument = structuredClone(input);
@@ -162,7 +183,10 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
     if (typeof style.glyphs === 'string') {
         const { url, kind } = rewriteUrl(style.glyphs, opts);
         if (kind === 'denied') {
-            warnings.push(`glyphs host not allowed, labels will not render: ${style.glyphs}`);
+            warnings.push(
+                `glyphs host not allowed, labels will not render: ${redact(style.glyphs)}`
+                + hint(opts),
+            );
             delete style.glyphs;
         } else {
             style.glyphs = withToken(url, opts.token);
@@ -201,7 +225,10 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
 
         if (denied.length) {
             dropped.add(id);
-            warnings.push(`source '${id}' omitted: host not on the allowlist (${classify(denied[0], opts).host})`);
+            warnings.push(
+                `source '${id}' omitted: host not on the allowlist (${classify(denied[0], opts).host})`
+                + hint(opts),
+            );
             continue;
         }
 

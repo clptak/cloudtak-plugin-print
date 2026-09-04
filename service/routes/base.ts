@@ -15,6 +15,13 @@ export default async function router(schema: Schema) {
             maxDpi: Type.Integer(),
             layoutDpi: Type.Integer(),
             maxTexture: Type.Integer(),
+            hosts: Type.Object({
+                apiPublic: Type.Union([Type.String(), Type.Null()]),
+                tilesPublic: Type.Union([Type.String(), Type.Null()]),
+                apiInternal: Type.String(),
+                tilesInternal: Type.String(),
+                allow: Type.Array(Type.String()),
+            }),
             paper: Type.Array(Type.Object({
                 id: Type.String(),
                 label: Type.String(),
@@ -32,6 +39,15 @@ export default async function router(schema: Schema) {
             maxDpi: c.maxDpi,
             layoutDpi: c.layoutDpi,
             maxTexture: c.maxTexture,
+            // Exposed because a wrong or missing public host silently drops every
+            // CloudTAK source in a style, and that should be one curl to find.
+            hosts: {
+                apiPublic: c.apiPublicHost ?? null,
+                tilesPublic: c.tilesPublicHost ?? null,
+                apiInternal: c.apiUrl,
+                tilesInternal: c.tilesInternalUrl,
+                allow: c.allowHosts,
+            },
             paper: Object.entries(PAPER).map(([id, p]) => ({
                 id,
                 label: p.label,

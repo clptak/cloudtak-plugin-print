@@ -60,6 +60,14 @@ await schema.load(
 app.listen(c.port, () => {
     console.log(`ok - print service on http://localhost:${c.port}`);
     console.log(`ok - concurrency=${c.concurrency} maxDpi=${c.maxDpi} layoutDpi=${c.layoutDpi}`);
+    console.log(`ok - api      public=${c.apiPublicHost ?? 'UNSET'} internal=${c.apiUrl}`);
+    console.log(`ok - tiles    public=${c.tilesPublicHost ?? 'UNSET'} internal=${c.tilesInternalUrl}`);
+    console.log(`ok - allow    ${c.allowHosts.length ? c.allowHosts.join(', ') : '(none — CloudTAK proxies upstream basemaps)'}`);
+
+    if (!c.apiPublicHost || !c.tilesPublicHost) {
+        console.warn('not ok - a public host is UNSET; every CloudTAK source in a style will be dropped.');
+        console.warn('         these derive from CloudTAK\'s API_URL and PMTILES_URL — check they reach this container.');
+    }
 });
 
 // Warm Chromium at boot rather than on the first request: a cold launch under

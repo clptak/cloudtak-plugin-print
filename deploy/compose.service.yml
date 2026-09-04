@@ -1,8 +1,15 @@
 # Paste into the tak-stack docker-compose.yml services block.
 #
 # Port 5010, not 5003 — cloudtak-events already publishes 5003.
-# `expose` and never `ports` — a service whose job is to fetch URLs and render
-# them must not be reachable except through Caddy, authenticated.
+#
+# `env_file: .env` is load-bearing: the service derives the PUBLIC hostnames from
+# CloudTAK's own API_URL and PMTILES_URL. Do NOT set API_URL here — overriding it
+# with an internal address makes every CloudTAK source in a style look like a
+# stranger's and get dropped. Use API_INTERNAL_URL for that.
+#
+# During testing, swap `expose` for `ports: ["127.0.0.1:5010:5010"]` so curl on
+# the host can reach it. A service whose job is to fetch URLs and render them must
+# never be published on 0.0.0.0.
 
   cloudtak-print:
     container_name: cloudtak-print
@@ -20,16 +27,10 @@
     shm_size: '1gb'
     env_file: .env
     environment:
-      # API_URL and PMTILES_URL come from the stack .env and are the PUBLIC URLs.
-      # The service derives the public hostnames from them, so there is nothing
-      # to hand-write and nothing to get wrong.
+      # Internal addresses only. API_URL and PMTILES_URL arrive from .env and are
+      # the public URLs the style documents actually contain.
       - API_INTERNAL_URL=http://cloudtak-api:5000
       - TILES_INTERNAL_URL=http://cloudtak-tiles:5002
-      - SigningSecret=${SigningSecret}
-      - ASSET_BUCKET=${ASSET_BUCKET}
-      - AWS_S3_Endpoint=${AWS_S3_Endpoint}
-      - AWS_S3_AccessKeyId=${AWS_S3_AccessKeyId}
-      - AWS_S3_SecretAccessKey=${AWS_S3_SecretAccessKey}
       - PRINT_CONCURRENCY=${PRINT_CONCURRENCY:-1}
       - PRINT_MAX_DPI=${PRINT_MAX_DPI:-200}
       - PRINT_LAYOUT_DPI=${PRINT_LAYOUT_DPI:-96}
