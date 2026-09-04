@@ -4,3 +4,10 @@ dist/
 .env-*
 *.log
 .DS_Store
+
+# Harvested job payloads. These are large (tens of MB) and carry a CloudTAK
+# session token, so they must never be committed.
+print-job*.json
+*-job.json
+sheet*.png
+smoke*.png

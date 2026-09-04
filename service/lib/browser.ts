@@ -16,6 +16,30 @@ const require = createRequire(import.meta.url);
  * Caddy, authenticated, with a tile-host allowlist.
  */
 const ARGS = [
+    /*
+     * Required, and safe here for a specific reason.
+     *
+     * The render page is served from a synthetic origin fulfilled off disk, and
+     * every tile then comes from a private network address (cloudtak-api on the
+     * docker network). Chromium blocks that combination outright: measured, the
+     * fetch fails as an opaque net::ERR_FAILED even when the server returns
+     * `Access-Control-Allow-Origin: *`, and disabling the Private Network Access
+     * feature flags alone does not lift it. Only this flag does.
+     *
+     * What the same-origin policy would protect is already protected by other
+     * means, which is why this is acceptable rather than merely expedient:
+     *
+     *   - the page content is ours, fulfilled from disk, with no third-party
+     *     script and no user-controlled markup;
+     *   - every outbound request is gated by the allowlist in lib/render.ts, so
+     *     what the page may reach is decided by us, not by the browser;
+     *   - each render gets a fresh browser context that is discarded afterwards;
+     *   - the service itself is never publicly reachable.
+     *
+     * Removing it will silently break all tile loading, so do not drop it while
+     * tidying flags.
+     */
+    '--disable-web-security',
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
