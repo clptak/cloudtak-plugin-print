@@ -76,6 +76,8 @@ export type Config = {
     maxTexture: number;
     /** How long a finished job record is retained in memory. */
     jobTtlMs: number;
+    /** How long a single render may take before it is abandoned. */
+    renderTimeoutMs: number;
 };
 
 let cached: Config | undefined;
@@ -102,6 +104,7 @@ export default function config(): Config {
         layoutDpi: int('PRINT_LAYOUT_DPI', 96),
         maxTexture: int('PRINT_MAX_TEXTURE', 8192),
         jobTtlMs: int('PRINT_JOB_TTL_SECONDS', 3600) * 1000,
+        renderTimeoutMs: int('PRINT_RENDER_TIMEOUT_SECONDS', 180) * 1000,
     };
 
     return cached;

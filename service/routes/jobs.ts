@@ -118,6 +118,10 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                     images: body.images,
                     overlays: body.overlays,
                     token: raw,
+                    timeoutMs: c.renderTimeoutMs,
+                    onProgress: (step) => {
+                        ctx.progress(0.5, step);
+                    },
                     rewrite: {
                         apiInternalUrl: c.apiUrl,
                         tilesInternalUrl: c.tilesInternalUrl,

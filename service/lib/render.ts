@@ -1,7 +1,7 @@
 import Err from '@openaddresses/batch-error';
 import type { Route, Request as PWRequest } from 'playwright';
 import { withMapPage, type PageSize } from './browser.js';
-import { rewriteStyle, type StyleDocument, type RewriteOptions } from './style.js';
+import { rewriteStyle, redact, type StyleDocument, type RewriteOptions } from './style.js';
 
 /**
  * A sprite image harvested from the client's live map.
@@ -40,6 +40,8 @@ export type RenderRequest = PageSize & {
     token?: string;
     rewrite: RewriteOptions;
     timeoutMs?: number;
+    /** Called with a human-readable step so a long render is not a silent one. */
+    onProgress?: (step: string) => void;
 };
 
 export type RenderResult = {
@@ -134,15 +136,41 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             errors.push(err.message);
         });
 
+        /*
+         * A render that never settles is the hardest failure to diagnose from the
+         * outside: MapLibre simply never fires 'idle'. Tracking every request means
+         * a timeout can say WHICH fetches are still outstanding rather than just
+         * that time ran out.
+         */
+        const inflight = new Map<string, number>();
+        let started = 0;
+        let finished = 0;
+
+        page.on('request', (request) => {
+            started++;
+            inflight.set(request.url(), Date.now());
+        });
+        page.on('requestfinished', (request) => {
+            finished++;
+            inflight.delete(request.url());
+        });
+
         // MapLibre reports a failed fetch as status 0 with no reason, which is
         // indistinguishable between CORS, abort and connection refused. Chromium
         // knows which it was, so capture it.
         const failures: string[] = [];
         page.on('requestfailed', (request) => {
+            inflight.delete(request.url());
             const reason = request.failure()?.errorText ?? 'unknown';
             if (reason === 'net::ERR_ABORTED') return; // our own allowlist, already reported
-            failures.push(`${reason} <- ${request.url()}`);
+            failures.push(`${reason} <- ${redact(request.url())}`);
         });
+
+        const heartbeat = req.onProgress
+            ? setInterval(() => {
+                    req.onProgress!(`loading: ${finished}/${started} requests, ${inflight.size} outstanding`);
+                }, 5000)
+            : undefined;
 
         await page.evaluate(async (input: {
             style: StyleDocument;
@@ -156,6 +184,7 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 __map?: unknown;
                 __ready?: boolean;
                 __failed?: string;
+                __diag?: Record<string, number>;
             };
 
             const decode = (image: { data: string; width: number; height: number }): ImageData => {
@@ -167,6 +196,10 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
 
             const pool = new Map<string, HarvestedImage>();
             for (const image of input.images) pool.set(image.id, image);
+
+            const diag = { images: input.images.length, imageMs: 0, styleMs: 0, idleMs: 0 };
+            const t0 = Date.now();
+            w.__diag = diag;
 
             const MapCtor = w.maplibregl.Map as new (opts: unknown) => {
                 on: (ev: string, cb: (e?: unknown) => void) => void;
@@ -217,7 +250,10 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             });
 
             map.once('load', () => {
+                diag.styleMs = Date.now() - t0;
+                const ti = Date.now();
                 for (const id of pool.keys()) install(id);
+                diag.imageMs = Date.now() - ti;
 
                 for (const overlay of input.overlays) {
                     const source = map.getSource(overlay.source);
@@ -226,6 +262,7 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             });
 
             map.on('idle', () => {
+                diag.idleMs = Date.now() - t0;
                 w.__ready = true;
             });
         }, {
@@ -236,16 +273,59 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             overlays: req.overlays ?? [],
         });
 
-        await page.waitForFunction(
-            () => {
-                const w = window as unknown as { __ready?: boolean; __failed?: string };
-                return w.__ready === true || typeof w.__failed === 'string';
-            },
-            undefined,
-            { timeout },
-        ).catch(() => {
-            throw new Err(504, null, `Render did not settle within ${timeout / 1000}s`);
-        });
+        try {
+            await page.waitForFunction(
+                () => {
+                    const w = window as unknown as { __ready?: boolean; __failed?: string };
+                    return w.__ready === true || typeof w.__failed === 'string';
+                },
+                undefined,
+                { timeout },
+            );
+        } catch {
+            // Ask the map what it is still waiting for, and name the oldest
+            // outstanding fetches. "Timed out" on its own is not actionable.
+            const state = await page.evaluate(() => {
+                const w = window as unknown as {
+                    __map?: {
+                        isStyleLoaded: () => boolean;
+                        areTilesLoaded: () => boolean;
+                        loaded: () => boolean;
+                    };
+                    __diag?: Record<string, unknown>;
+                };
+
+                if (!w.__map) return { styleLoaded: null, tilesLoaded: null, loaded: null, diag: w.__diag };
+
+                return {
+                    styleLoaded: w.__map.isStyleLoaded(),
+                    tilesLoaded: w.__map.areTilesLoaded(),
+                    loaded: w.__map.loaded(),
+                    diag: w.__diag,
+                };
+            }).catch(() => null);
+
+            const now = Date.now();
+            const oldest = [...inflight.entries()]
+                .sort((a, b) => {
+                    return a[1] - b[1];
+                })
+                .slice(0, 6)
+                .map(([url, at]) => {
+                    return `${Math.round((now - at) / 1000)}s ${redact(url)}`;
+                });
+
+            throw new Err(504, null, [
+                `Render did not settle within ${timeout / 1000}s.`,
+                `requests: ${finished}/${started} finished, ${inflight.size} outstanding, ${failures.length} failed.`,
+                state ? `map: styleLoaded=${state.styleLoaded} tilesLoaded=${state.tilesLoaded} loaded=${state.loaded}.` : '',
+                state && state.diag ? `page: ${JSON.stringify(state.diag)}.` : '',
+                oldest.length ? `oldest outstanding: ${oldest.join(' | ')}` : '',
+                failures.length ? `failures: ${failures.slice(0, 3).join('; ')}` : '',
+            ].filter(Boolean).join(' '));
+        } finally {
+            if (heartbeat) clearInterval(heartbeat);
+        }
 
         const failure = await page.evaluate(() => {
             return (window as unknown as { __failed?: string }).__failed;
