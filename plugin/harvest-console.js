@@ -86,11 +86,28 @@
         if (tiles && tiles.length) {
             delete source.url;
             source.tiles = tiles;
+
+            // Copy only what the style spec allows for THIS source type. Blindly
+            // copying every property off the live source produces a style MapLibre
+            // rejects outright -- `scheme` is valid on vector and raster sources
+            // but not on raster-dem, and one bad property fails the whole render.
             if (live.minzoom != null) source.minzoom = live.minzoom;
             if (live.maxzoom != null) source.maxzoom = live.maxzoom;
             if (live.bounds) source.bounds = live.bounds;
-            if (live.scheme) source.scheme = live.scheme;
-            resolved.push(`${id} (${url})`);
+            if (live.attribution) source.attribution = live.attribution;
+
+            if (source.type === 'vector' || source.type === 'raster') {
+                // 'xyz' is the default, so only a non-default value is worth carrying.
+                if (live.scheme === 'tms') source.scheme = 'tms';
+            }
+            if (source.type === 'raster' || source.type === 'raster-dem') {
+                if (live.tileSize) source.tileSize = live.tileSize;
+            }
+            if (source.type === 'raster-dem' && live.encoding) {
+                source.encoding = live.encoding;
+            }
+
+            resolved.push(`${id} (${source.type})`);
         } else {
             unresolved.push(`${id} (${url})`);
         }

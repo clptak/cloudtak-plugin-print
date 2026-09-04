@@ -204,3 +204,35 @@ test('no configuration hint is added once the public hosts resolve', () => {
 
     assert.doesNotMatch(warnings.join('\n'), /API_URL and PMTILES_URL/);
 });
+
+test('an invalid scheme on a raster-dem source is stripped rather than failing the sheet', () => {
+    // MapLibre rejects the whole style over one unknown property and does not say
+    // which source it came from, so this must not reach it.
+    const style = base();
+    style.sources.dem = {
+        type: 'raster-dem',
+        tiles: ['https://tiles.cloudtak.ccsosar.net/dem/{z}/{x}/{y}.webp'],
+        scheme: 'xyz',
+        encoding: 'mapbox',
+    };
+
+    const { style: out, warnings } = rewriteStyle(style, OPTS);
+
+    const dem = (out.sources as Record<string, Record<string, unknown>>).dem;
+    assert.equal('scheme' in dem, false);
+    assert.equal(dem.encoding, 'mapbox', 'valid properties must survive');
+    assert.match(warnings.join('\n'), /raster-dem/);
+});
+
+test('scheme survives on the source types where it is valid', () => {
+    const style = base();
+    style.sources.vec = {
+        type: 'vector',
+        tiles: ['https://tiles.cloudtak.ccsosar.net/v/{z}/{x}/{y}.mvt'],
+        scheme: 'tms',
+    };
+
+    const { style: out } = rewriteStyle(style, OPTS);
+
+    assert.equal((out.sources as Record<string, Record<string, unknown>>).vec.scheme, 'tms');
+});

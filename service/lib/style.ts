@@ -196,6 +196,21 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
     const sources = (style.sources ?? {}) as Record<string, Record<string, unknown>>;
     const dropped = new Set<string>();
 
+    /**
+     * MapLibre rejects an entire style over one unknown property on one source,
+     * and reports it without naming the source. Since the style is assembled by a
+     * client we do not control, strip the combinations known to be invalid rather
+     * than losing a whole sheet to them.
+     *
+     * `scheme` is valid on vector and raster sources but not on raster-dem.
+     */
+    for (const source of Object.values(sources)) {
+        if (source.type === 'raster-dem' && 'scheme' in source) {
+            delete source.scheme;
+            warnings.push('removed invalid \'scheme\' property from a raster-dem source');
+        }
+    }
+
     for (const [id, source] of Object.entries(sources)) {
         // Inline GeoJSON has no host and is always safe.
         if (source.type === 'geojson' && typeof source.data !== 'string') continue;
