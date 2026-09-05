@@ -137,9 +137,18 @@ function edgeCrossings(points: Point[], width: number, height: number): {
     return out;
 }
 
-const path = (piece: Point[]): string => {
+/**
+ * Path data in SHEET coordinates.
+ *
+ * The offset is baked into the coordinates rather than applied with a transform
+ * on the group. A `clip-path` is resolved in the user space established by the
+ * element's own transform, so a clipped-and-translated group has its clip
+ * rectangle shifted by the same offset — which let grid lines escape past the
+ * right and bottom neatlines and run through the margin labels.
+ */
+const path = (piece: Point[], ox: number, oy: number): string => {
     return piece.map((p, i) => {
-        return `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+        return `${i ? 'L' : 'M'}${(p[0] + ox).toFixed(1)} ${(p[1] + oy).toFixed(1)}`;
     }).join(' ');
 };
 
@@ -217,7 +226,7 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
         }) as Point[];
 
         for (const piece of clipToFrame(projected, view.width, view.height)) {
-            strokes.push(`<path d="${path(piece)}"/>`);
+            strokes.push(`<path d="${path(piece, ox, oy)}"/>`);
         }
 
         const cross = edgeCrossings(projected, view.width, view.height);
@@ -232,7 +241,9 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
                 const x = ox + cross.bottom;
                 const y = oy + view.height;
                 ticks.push(tickMark(x, y, x, y + tick));
-                labels.push(label(x, y + tick + gap + principalPx * 0.8, line.value, 'middle'));
+                // Mirrors the top: the same tick, the same gap, then the cap
+                // height so the type sits off the neatline by the same amount.
+                labels.push(label(x, y + tick + gap + principalPx * 0.72, line.value, 'middle'));
             }
         } else {
             if (cross.left !== undefined) {
@@ -256,7 +267,7 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
         + `<defs><clipPath id="frame">`
         + `<rect x="${ox}" y="${oy}" width="${view.width}" height="${view.height}"/>`
         + `</clipPath></defs>`
-        + `<g clip-path="url(#frame)" transform="translate(${ox} ${oy})"`
+        + `<g clip-path="url(#frame)"`
         + ` fill="none" stroke="${colour}" stroke-width="${weight}"`
         + ` stroke-opacity="0.75" stroke-linecap="butt">${strokes.join('')}</g>`
         + `<g fill="none" stroke="${colour}" stroke-width="${weight}">${ticks.join('')}</g>`

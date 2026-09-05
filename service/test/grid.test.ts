@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mercator, projector, viewportBBox, clipToFrame, gridSvg } from '../lib/grid.js';
 import { toUTM } from '../lib/utm.js';
+import { sheetHtml } from '../lib/sheet.js';
+import { sheet as geometry, MARGINS, GRID_GUTTER } from '../lib/paper.js';
 
 const VIEW = { center: [-111.65, 35.2] as [number, number], zoom: 14.3569, width: 2000, height: 3000 };
 
@@ -137,4 +139,48 @@ test('side labels are rotated to read bottom-to-top', () => {
     const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
 
     assert.match(svg, /transform="rotate\(-90 /);
+});
+
+test('grid paths and the clip rectangle share one coordinate system', () => {
+    // A clip-path is resolved in the user space established by the element's own
+    // transform, so a clipped-and-translated group has its clip rectangle shifted
+    // by the same offset — which let lines escape past the right neatline and run
+    // straight through the margin labels. The offset is baked into the path
+    // coordinates instead, so this asserts there is no transform to reintroduce it.
+    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
+
+    const group = svg.match(/<g clip-path="url\(#frame\)"[^>]*>/)?.[0] ?? '';
+    assert.doesNotMatch(group, /transform=/, 'a transform here shifts the clip off the frame');
+
+    const ox = SHEET.frameOrigin.x * 200;
+    const oy = SHEET.frameOrigin.y * 200;
+
+    const rect = svg.match(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"/);
+    assert.ok(rect);
+    assert.equal(Number(rect![1]), ox);
+    assert.equal(Number(rect![2]), oy);
+    assert.equal(Number(rect![3]), VIEW.width);
+    assert.equal(Number(rect![4]), VIEW.height);
+
+    // Path coordinates must be in the same space: they should bracket the frame.
+    const xs = [...svg.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map(m => Number(m[1]));
+    assert.ok(Math.min(...xs) < ox, 'lines should start left of the frame and be clipped');
+    assert.ok(Math.max(...xs) > ox + VIEW.width, 'and continue past its right edge');
+    assert.ok(Math.max(...xs) < ox + VIEW.width + 200, 'but not by a whole frame width');
+});
+
+test('the title block leaves room for the bottom row of grid labels', () => {
+    // Its rule sliced the bottom labels in half on the first gridded sheet.
+    const g = geometry('tabloid', 'portrait');
+    const html = sheetHtml({
+        map: Buffer.alloc(0), sheet: g.sheet, frame: g.frame,
+        meta: { title: 'x', scale: 24000, generated: '2026-09-05T00:00:00.000Z' },
+    });
+
+    const height = Number(html.match(/height:\s*([\d.]+)in;\s*\n\s*display:\s*flex/)?.[1] ?? 0);
+    const bottom = Number(html.match(/bottom:\s*([\d.]+)in;\s*\n\s*height/)?.[1] ?? 0);
+
+    // Title block top must clear the frame by at least the reserved gutter.
+    assert.ok(bottom + height <= MARGINS.bottom - GRID_GUTTER + 1e-9,
+        `title block top at ${bottom + height}in, frame bottom at ${MARGINS.bottom}in`);
 });

@@ -20,6 +20,13 @@ export const PAPER_SIZES = Object.keys(PAPER) as PaperSize[];
 /** Default margins in inches. The bottom strip carries the title block. */
 export const MARGINS = { top: 0.5, right: 0.5, bottom: 1.5, left: 0.5 };
 
+/**
+ * Space reserved immediately below the map frame for the bottom row of grid
+ * labels. Without it the title block's rule runs straight through them, which is
+ * exactly what happened on the first gridded sheet.
+ */
+export const GRID_GUTTER = 0.45;
+
 /** Metres per inch. */
 const M_PER_INCH = 0.0254;
 

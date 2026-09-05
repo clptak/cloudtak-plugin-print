@@ -1,5 +1,5 @@
 import { getBrowser, ORIGIN } from './browser.js';
-import { MARGINS } from './paper.js';
+import { MARGINS, GRID_GUTTER } from './paper.js';
 
 /**
  * Compose the finished sheet and emit a PDF.
@@ -139,8 +139,8 @@ export function sheetHtml(opts: SheetOptions): string {
     position: absolute;
     left: ${MARGINS.left}in;
     right: ${MARGINS.right}in;
-    bottom: 0.28in;
-    height: ${MARGINS.bottom - 0.45}in;
+    bottom: 0.26in;
+    height: ${MARGINS.bottom - GRID_GUTTER - 0.26}in;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
