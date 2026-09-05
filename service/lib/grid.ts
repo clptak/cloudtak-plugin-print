@@ -149,17 +149,26 @@ export type GridOptions = {
     interval: number;
     /** CSS pixels per inch, so line weights and type can be set in real units. */
     layoutDpi: number;
+    /** Full sheet size in inches — the SVG spans the sheet so labels can sit in the margin. */
+    sheet: { width: number; height: number };
+    /** Top-left of the map frame within the sheet, in inches. */
+    frameOrigin: { x: number; y: number };
     /** Grid line weight in millimetres. */
     lineMm?: number;
     colour?: string;
 };
 
 /**
- * Render the grid as an SVG overlay sized to the map frame.
+ * Render the grid as an SVG overlay spanning the whole sheet.
  *
- * Labels go INSIDE the neatline with a white halo rather than out in the margin:
- * they always fit, they stay next to the line they belong to, and the margin
- * stays free for the title block and, later, the scale bar and north arrow.
+ * The SVG covers the sheet rather than just the map frame so that labels can sit
+ * OUTSIDE the neatline, in the margin, which is the printed convention and far
+ * easier to read than labels competing with the map behind them. Lines are
+ * clipped to the frame; only the labels and their ticks reach into the margin.
+ *
+ * Side labels are rotated to read bottom-to-top, as on a USGS quad: a full grid
+ * reference is wider than a half-inch margin, and rotating is what a printed map
+ * does rather than shrinking the type.
  */
 export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: number } {
     const { view, zone, interval, layoutDpi } = opts;
@@ -168,27 +177,38 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
         return (v / 25.4) * layoutDpi;
     };
 
+    const sheetW = opts.sheet.width * layoutDpi;
+    const sheetH = opts.sheet.height * layoutDpi;
+    const ox = opts.frameOrigin.x * layoutDpi;
+    const oy = opts.frameOrigin.y * layoutDpi;
+
     const project = projector(view);
     const lines = gridLines({ bbox: viewportBBox(view), zone, interval });
 
     const strokes: string[] = [];
+    const ticks: string[] = [];
     const labels: string[] = [];
 
-    const fontPx = mm(2.6);
-    const smallPx = mm(1.7);
+    const principalPx = mm(3.0);
+    const smallPx = mm(1.9);
+    const gap = mm(1.6);
+    const tick = mm(2.0);
 
-    const label = (x: number, y: number, value: number, anchor: string, rotate?: number) => {
+    const label = (x: number, y: number, value: number, anchor: string, rotate = 0) => {
         const parts = labelParts(value, interval);
-        const transform = rotate ? ` transform="rotate(${rotate} ${x.toFixed(1)} ${y.toFixed(1)})"` : '';
+        const at = `${x.toFixed(1)} ${y.toFixed(1)}`;
+        const transform = rotate ? ` transform="rotate(${rotate} ${at})"` : '';
 
-        // Principal digits large, the rest small — what a field team reads aloud.
         return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}"${transform}`
-            + ` font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif"`
-            + ` paint-order="stroke" stroke="#fff" stroke-width="${mm(0.7).toFixed(2)}" stroke-linejoin="round">`
-            + `<tspan font-size="${smallPx.toFixed(1)}" fill="${colour}">${parts.prefix}</tspan>`
-            + `<tspan font-size="${fontPx.toFixed(1)}" font-weight="700" fill="${colour}">${parts.principal}</tspan>`
-            + `<tspan font-size="${smallPx.toFixed(1)}" fill="${colour}">${parts.suffix}</tspan>`
+            + ` font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="${colour}">`
+            + `<tspan font-size="${smallPx.toFixed(1)}">${parts.prefix}</tspan>`
+            + `<tspan font-size="${principalPx.toFixed(1)}" font-weight="700">${parts.principal}</tspan>`
+            + `<tspan font-size="${smallPx.toFixed(1)}">${parts.suffix}</tspan>`
             + `</text>`;
+    };
+
+    const tickMark = (x1: number, y1: number, x2: number, y2: number) => {
+        return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
     };
 
     for (const line of lines as GridLine[]) {
@@ -201,21 +221,45 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
         }
 
         const cross = edgeCrossings(projected, view.width, view.height);
-        const inset = mm(2.2);
 
         if (line.kind === 'easting') {
-            if (cross.top !== undefined) labels.push(label(cross.top, inset + fontPx, line.value, 'middle'));
-            if (cross.bottom !== undefined) labels.push(label(cross.bottom, view.height - inset, line.value, 'middle'));
+            if (cross.top !== undefined) {
+                const x = ox + cross.top;
+                ticks.push(tickMark(x, oy, x, oy - tick));
+                labels.push(label(x, oy - tick - gap, line.value, 'middle'));
+            }
+            if (cross.bottom !== undefined) {
+                const x = ox + cross.bottom;
+                const y = oy + view.height;
+                ticks.push(tickMark(x, y, x, y + tick));
+                labels.push(label(x, y + tick + gap + principalPx * 0.8, line.value, 'middle'));
+            }
         } else {
-            if (cross.left !== undefined) labels.push(label(inset, cross.left - inset, line.value, 'start'));
-            if (cross.right !== undefined) labels.push(label(view.width - inset, cross.right - inset, line.value, 'end'));
+            if (cross.left !== undefined) {
+                const y = oy + cross.left;
+                ticks.push(tickMark(ox, y, ox - tick, y));
+                labels.push(label(ox - tick - gap, y, line.value, 'middle', -90));
+            }
+            if (cross.right !== undefined) {
+                const y = oy + cross.right;
+                const x = ox + view.width;
+                ticks.push(tickMark(x, y, x + tick, y));
+                labels.push(label(x + tick + gap + principalPx * 0.8, y, line.value, 'middle', -90));
+            }
         }
     }
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${view.width}" height="${view.height}"`
-        + ` viewBox="0 0 ${view.width} ${view.height}">`
-        + `<g fill="none" stroke="${colour}" stroke-width="${mm(opts.lineMm ?? 0.25).toFixed(2)}"`
+    const weight = mm(opts.lineMm ?? 0.25).toFixed(2);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="grid" width="${sheetW}" height="${sheetH}"`
+        + ` viewBox="0 0 ${sheetW} ${sheetH}">`
+        + `<defs><clipPath id="frame">`
+        + `<rect x="${ox}" y="${oy}" width="${view.width}" height="${view.height}"/>`
+        + `</clipPath></defs>`
+        + `<g clip-path="url(#frame)" transform="translate(${ox} ${oy})"`
+        + ` fill="none" stroke="${colour}" stroke-width="${weight}"`
         + ` stroke-opacity="0.75" stroke-linecap="butt">${strokes.join('')}</g>`
+        + `<g fill="none" stroke="${colour}" stroke-width="${weight}">${ticks.join('')}</g>`
         + labels.join('')
         + `</svg>`;
 

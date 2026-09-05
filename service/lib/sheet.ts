@@ -118,16 +118,21 @@ export function sheetHtml(opts: SheetOptions): string {
     overflow: hidden;
   }
 
-  .frame img,
-  .frame svg {
+  .frame img {
     display: block;
     width: ${frame.width}in;
     height: ${frame.height}in;
   }
 
-  .frame svg {
+  /* The grid spans the whole sheet, not the frame, so its labels can sit in the
+     margin outside the neatline. It must therefore live outside .frame, whose
+     overflow is hidden. */
+  svg.grid {
     position: absolute;
     inset: 0;
+    width: ${sheet.width}in;
+    height: ${sheet.height}in;
+    pointer-events: none;
   }
 
   .title-block {
@@ -198,7 +203,8 @@ export function sheetHtml(opts: SheetOptions): string {
 </head>
 <body>
   <div class="sheet">
-    <div class="frame"><img src="${ORIGIN}/map.png" alt="">${opts.grid ?? ''}</div>
+    <div class="frame"><img src="${ORIGIN}/map.png" alt=""></div>
+    ${opts.grid ?? ''}
 
     <div class="title-block">
       <div class="title">${escape(meta.title)}</div>

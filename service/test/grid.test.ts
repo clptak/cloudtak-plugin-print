@@ -60,8 +60,10 @@ test('a line crossing out and back yields two pieces', () => {
     assert.equal(pieces.length, 2);
 });
 
+const SHEET = { sheet: { width: 11, height: 17 }, frameOrigin: { x: 0.5, y: 0.5 } };
+
 test('the grid renders as vector paths and labelled text', () => {
-    const { svg, lines, zone } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200 });
+    const { svg, lines, zone } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
 
     assert.equal(zone, 12);
     assert.ok(lines > 4, `expected several grid lines, got ${lines}`);
@@ -74,7 +76,7 @@ test('the grid renders as vector paths and labelled text', () => {
 test('grid spacing on the page matches the ground interval at the chosen scale', () => {
     // The real test of registration: 1000m at 1:24,000 is 1000/24000 metres of
     // paper, and at 200 css px/inch that is a specific number of pixels.
-    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200 });
+    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
 
     const verticals = [...svg.matchAll(/<path d="M([\d.]+) /g)].map(m => Number(m[1]));
     const xs = [...new Set(verticals.map(v => Math.round(v)))].sort((a, b) => a - b);
@@ -98,4 +100,41 @@ test('a labelled grid value really is on its grid line', () => {
     assert.ok(Math.abs(x - view.width / 2) < 1e-6 && Math.abs(y - view.height / 2) < 1e-6);
     assert.ok(u.easting > 400000 && u.easting < 500000, `Flagstaff easting ${u.easting}`);
     assert.ok(u.northing > 3800000 && u.northing < 4000000, `Flagstaff northing ${u.northing}`);
+});
+
+test('labels sit outside the neatline, in the margin', () => {
+    // Inside the frame they compete with the map behind them; the printed
+    // convention is a clear margin, and it is what makes them readable.
+    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
+
+    const frameTop = SHEET.frameOrigin.y * 200;
+    const frameLeft = SHEET.frameOrigin.x * 200;
+
+    const texts = [...svg.matchAll(/<text x="([\d.]+)" y="([\d.]+)"/g)]
+        .map(m => ({ x: Number(m[1]), y: Number(m[2]) }));
+
+    assert.ok(texts.length > 4, 'expected labels on the edges');
+
+    const outside = texts.filter((t) => {
+        return t.y < frameTop || t.x < frameLeft
+            || t.y > frameTop + VIEW.height || t.x > frameLeft + VIEW.width;
+    });
+
+    assert.equal(outside.length, texts.length, 'every label must be clear of the map frame');
+});
+
+test('the svg spans the sheet, and the lines are clipped to the frame', () => {
+    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
+
+    assert.match(svg, new RegExp(`width="${11 * 200}"`), 'svg must span the sheet, not the frame');
+    assert.match(svg, /clip-path="url\(#frame\)"/, 'lines must still be clipped to the neatline');
+    assert.match(svg, /<line x1=/, 'ticks should cross the neatline');
+});
+
+test('side labels are rotated to read bottom-to-top', () => {
+    // A full grid reference is wider than a half-inch margin; a printed map
+    // rotates rather than shrinking the type.
+    const { svg } = gridSvg({ view: VIEW, zone: 12, interval: 1000, layoutDpi: 200, ...SHEET });
+
+    assert.match(svg, /transform="rotate\(-90 /);
 });

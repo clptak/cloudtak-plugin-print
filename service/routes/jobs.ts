@@ -4,7 +4,7 @@ import { Type } from '@sinclair/typebox';
 import auth, { tokenFrom } from '../lib/auth.js';
 import config from '../lib/config.js';
 import { PrintRequest, JobStatus } from '../lib/types.js';
-import { sheet, footprint } from '../lib/paper.js';
+import { sheet, footprint, MARGINS } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
 import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type BBox } from '../lib/geo.js';
 import { zoneFor, bandFor } from '../lib/utm.js';
@@ -192,6 +192,8 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                             zone,
                             interval,
                             layoutDpi: resolution.layoutDpi,
+                            sheet: geometry.sheet,
+                            frameOrigin: { x: MARGINS.left, y: MARGINS.top },
                         })
                     : undefined;
 
