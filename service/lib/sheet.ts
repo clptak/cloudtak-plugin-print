@@ -26,6 +26,8 @@ export type SheetMeta = {
     datum?: string;
     /** Rendered map resolution, for the provenance line. */
     dpi?: number;
+    /** e.g. "UTM 12S · 1000 m". Printed so a reader knows what grid they have. */
+    gridZone?: string;
     /** Anything the operator should know about this sheet. */
     warnings?: string[];
 };
@@ -35,6 +37,12 @@ export type SheetOptions = {
     map: Buffer;
     /** Full sheet size in inches. */
     sheet: { width: number; height: number };
+    /**
+     * UTM grid as an SVG overlay sized to the map frame. Kept out of the map
+     * raster so it prints as vector line work and vector text — a grid is
+     * measured against, so it must not inherit the imagery's resolution cap.
+     */
+    grid?: string;
     /** Map frame size in inches, inside the margins. */
     frame: { width: number; height: number };
     meta: SheetMeta;
@@ -65,6 +73,7 @@ export function sheetHtml(opts: SheetOptions): string {
         ['Generated', stamp],
     ];
 
+    if (meta.gridZone) fields.splice(2, 0, ['Grid', meta.gridZone]);
     if (meta.incident) fields.unshift(['Incident', meta.incident]);
     if (meta.author) fields.push(['Author', meta.author]);
 
@@ -109,10 +118,16 @@ export function sheetHtml(opts: SheetOptions): string {
     overflow: hidden;
   }
 
-  .frame img {
+  .frame img,
+  .frame svg {
     display: block;
     width: ${frame.width}in;
     height: ${frame.height}in;
+  }
+
+  .frame svg {
+    position: absolute;
+    inset: 0;
   }
 
   .title-block {
@@ -183,7 +198,7 @@ export function sheetHtml(opts: SheetOptions): string {
 </head>
 <body>
   <div class="sheet">
-    <div class="frame"><img src="${ORIGIN}/map.png" alt=""></div>
+    <div class="frame"><img src="${ORIGIN}/map.png" alt="">${opts.grid ?? ''}</div>
 
     <div class="title-block">
       <div class="title">${escape(meta.title)}</div>

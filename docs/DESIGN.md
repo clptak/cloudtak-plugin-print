@@ -405,7 +405,14 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    ground. Verified: an 11x17 request produces a PDF whose MediaBox is exactly
    11.00in x 17.00in. A sheet rendered with failures is stamped INCOMPLETE on the
    page itself, because a field team holding paper cannot see the job status.
-4. UTM grid engine, zone-aware, with edge labels.
+4. ~~UTM grid engine, zone-aware, with edge labels.~~ **Done.** `lib/utm.ts` is the
+   geodesy (Transverse Mercator series on WGS 84, MGRS bands, both zone
+   irregularities); `lib/grid.ts` projects the resulting polylines with the same
+   transform MapLibre used, clips them to the neatline, and emits SVG so the grid
+   stays vector in the PDF. Zone is taken from the sheet centre and held across
+   the whole page, so a sheet crossing 114 deg W gets one continuous grid rather
+   than two that do not meet. Verified: grid spacing on the page matches the
+   ground interval at the chosen scale to within 2%.
 5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.
 6. Remaining furniture — scale bar, north arrow, declination, branding, legend.
 7. Fit-to-area mode.

@@ -6,7 +6,9 @@ import config from '../lib/config.js';
 import { PrintRequest, JobStatus } from '../lib/types.js';
 import { sheet, footprint } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
-import { zoomForScale, bboxCenter, scaleForBBox, snapScale, type BBox } from '../lib/geo.js';
+import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type BBox } from '../lib/geo.js';
+import { zoneFor, bandFor } from '../lib/utm.js';
+import { gridSvg } from '../lib/grid.js';
 import { renderMap } from '../lib/render.js';
 import { composeSheet } from '../lib/sheet.js';
 import { smokeRender } from '../lib/browser.js';
@@ -171,10 +173,33 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
 
                 ctx.progress(0.85, 'composing sheet');
 
+                // The grid is drawn over the map rather than into it, so it stays
+                // vector in the PDF. Zone comes from the sheet centre and is held
+                // across the whole page — a sheet crossing a zone boundary gets one
+                // continuous grid, which is the standard handling.
+                const wantsGrid = (body.furniture?.grid ?? 'utm') !== 'none';
+                const interval = gridInterval(scale);
+                const zone = zoneFor(center[0], center[1]);
+
+                const grid = wantsGrid
+                    ? gridSvg({
+                            view: {
+                                center,
+                                zoom,
+                                width: resolution.css.width,
+                                height: resolution.css.height,
+                            },
+                            zone,
+                            interval,
+                            layoutDpi: resolution.layoutDpi,
+                        })
+                    : undefined;
+
                 const pdf = await composeSheet({
                     map: result.png,
                     sheet: geometry.sheet,
                     frame: geometry.frame,
+                    grid: grid?.svg,
                     meta: {
                         title: body.title,
                         incident: body.incident,
@@ -182,6 +207,9 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         scale,
                         generated: new Date().toISOString(),
                         dpi: resolution.dpi,
+                        gridZone: grid
+                            ? `UTM ${zone}${bandFor(center[1])} \u00b7 ${interval} m`
+                            : undefined,
                         warnings: result.warnings,
                     },
                 });
