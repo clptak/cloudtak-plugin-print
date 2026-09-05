@@ -6,6 +6,14 @@ Status: **design draft**. Sections marked **OPEN** are proposed defaults awaitin
 
 ---
 
+## 0. Verified on paper
+
+**2026-09-05 — a printed sheet measures exactly against a 1:24,000 UTM tool, and the grid labels read as expected.**
+
+That single check validates the whole chain at once, because every link has to be right simultaneously for it to pass: the scale-to-zoom geodesy, the Web Mercator projection used to place the grid, the mark-scaling pass that lays the map out at output resolution, the `@page` declaration, the PDF MediaBox, and the grid's registration against the map beneath it. An error in any one of them would show up as a measurable offset.
+
+Anything that changes those pieces should be re-checked the same way: print it and put a grid tool on it. Nothing in the test suite can substitute for that, because the suite cannot see the paper.
+
 ## 1. Goals
 
 Produce a print-quality PDF map from CloudTAK — basemap plus live operational overlays — at a chosen scale on a standard American sheet, suitable for use in the field with a map, compass, and UTM grid tool.
