@@ -22,6 +22,7 @@
         "@sinclair/typebox": "^0.34.11",
         "cors": "^2.8.5",
         "express": "^5.0.0",
+        "geomagnetism": "^0.2.0",
         "jsonwebtoken": "^9.0.0",
         "maplibre-gl": "^6.0.0",
         "playwright": "^1.49.0"

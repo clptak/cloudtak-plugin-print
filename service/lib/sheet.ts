@@ -28,6 +28,8 @@ export type SheetMeta = {
     dpi?: number;
     /** e.g. "UTM 12S · 1000 m". Printed so a reader knows what grid they have. */
     gridZone?: string;
+    /** Agency name, set above the title. */
+    agency?: string;
     /** Anything the operator should know about this sheet. */
     warnings?: string[];
 };
@@ -43,6 +45,12 @@ export type SheetOptions = {
      * measured against, so it must not inherit the imagery's resolution cap.
      */
     grid?: string;
+    /** Scale bar and north arrow, already sized in real units. */
+    furniture?: {
+        scaleBar?: { svg: string; widthPx: number; heightPx: number; viewBox: string };
+        northArrow?: { svg: string; widthPx: number; heightPx: number; viewBox: string };
+        layoutDpi: number;
+    };
     /** Map frame size in inches, inside the margins. */
     frame: { width: number; height: number };
     meta: SheetMeta;
@@ -61,6 +69,17 @@ export function formatScale(scale: number): string {
 
 export function sheetHtml(opts: SheetOptions): string {
     const { sheet, frame, meta } = opts;
+
+    const dpi = opts.furniture?.layoutDpi ?? 200;
+    const embed = (d?: { svg: string; widthPx: number; heightPx: number; viewBox: string }) => {
+        if (!d) return '';
+        return `<svg width="${(d.widthPx / dpi).toFixed(3)}in" height="${(d.heightPx / dpi).toFixed(3)}in"`
+            + ` viewBox="${d.viewBox}" xmlns="http://www.w3.org/2000/svg">${d.svg}</svg>`;
+    };
+
+    const drawings = opts.furniture
+        ? `<div class="marginalia">${embed(opts.furniture.scaleBar)}${embed(opts.furniture.northArrow)}</div>`
+        : '';
 
     const when = new Date(meta.generated);
     const stamp = `${when.toISOString().slice(0, 16).replace('T', ' ')}Z`;
@@ -144,26 +163,74 @@ export function sheetHtml(opts: SheetOptions): string {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 0.3in;
+    gap: 0.28in;
     border-top: 1pt solid #111;
     padding-top: 0.10in;
+    /* A long title used to wrap and escape upward through the rule into the grid
+       labels. Nothing in this block may leave it. */
+    overflow: hidden;
+  }
+
+  .identity {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    /* flex items refuse to shrink below their content without this, which is
+       what let the title push the rest of the block out of shape. */
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .agency {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 7pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 0.02in;
+  }
+
+  /* Scale bar and north arrow sit at the right of the block, in the order a
+     reader wants them: how far, then which way. */
+  .marginalia {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.28in;
+    flex: none;
+  }
+
+  .marginalia svg {
+    display: block;
   }
 
   .title {
-    font-size: 16pt;
+    font-size: 14pt;
     font-weight: 700;
-    line-height: 1.15;
+    line-height: 1.1;
     letter-spacing: -0.01em;
-    max-width: 55%;
+    /* One line, truncated. A sheet title that reflows changes the height of the
+       whole block and pushes the scale bar and north arrow out of place. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
+  /* Under the title, reading left to right, so the title keeps the width it
+     needs. Ranged left because it now sits below a left-aligned title. */
   .fields {
     display: flex;
-    gap: 0.30in;
-    text-align: right;
+    gap: 0.26in;
+    flex: none;
+    white-space: nowrap;
+    margin-top: 0.07in;
   }
 
   .field-label {
+    text-align: left;
     font-size: 6.5pt;
     font-weight: 700;
     letter-spacing: 0.09em;
@@ -173,6 +240,7 @@ export function sheetHtml(opts: SheetOptions): string {
   }
 
   .field-value {
+    text-align: left;
     font-size: 10.5pt;
     font-weight: 600;
     white-space: nowrap;
@@ -207,13 +275,17 @@ export function sheetHtml(opts: SheetOptions): string {
     ${opts.grid ?? ''}
 
     <div class="title-block">
-      <div class="title">${escape(meta.title)}</div>
-      <div class="fields">
-        ${fields.map(([label, value]) => {
-            return `<div><div class="field-label">${escape(label)}</div>`
-                + `<div class="field-value">${escape(value)}</div></div>`;
-        }).join('\n        ')}
+      <div class="identity">
+        ${meta.agency ? `<div class="agency">${escape(meta.agency)}</div>` : ''}
+        <div class="title">${escape(meta.title)}</div>
+        <div class="fields">
+          ${fields.map(([label, value]) => {
+                return `<div><div class="field-label">${escape(label)}</div>`
+                    + `<div class="field-value">${escape(value)}</div></div>`;
+            }).join('\n          ')}
+        </div>
       </div>
+      ${drawings}
     </div>
 
     <div class="provenance">CloudTAK Print${meta.dpi ? ` &middot; map imagery ${meta.dpi} dpi` : ''} &middot; north up</div>

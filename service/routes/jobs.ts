@@ -9,6 +9,7 @@ import { resolve } from '../lib/resolution.js';
 import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type BBox } from '../lib/geo.js';
 import { zoneFor, bandFor } from '../lib/utm.js';
 import { gridSvg } from '../lib/grid.js';
+import { scaleBar, northArrow, declinationAt } from '../lib/furniture.js';
 import { renderMap } from '../lib/render.js';
 import { composeSheet } from '../lib/sheet.js';
 import { smokeRender } from '../lib/browser.js';
@@ -197,11 +198,31 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         })
                     : undefined;
 
+                // Margin furniture. The declination model is consulted per sheet
+                // rather than per service start, so a long-running container does
+                // not print a bearing computed months ago.
+                const dec = declinationAt(center[0], center[1], zone);
+
+                const strip = MARGINS.bottom - 0.45 - 0.26;
+
                 const pdf = await composeSheet({
                     map: result.png,
                     sheet: geometry.sheet,
                     frame: geometry.frame,
                     grid: grid?.svg,
+                    furniture: {
+                        layoutDpi: resolution.layoutDpi,
+                        scaleBar: scaleBar({
+                            scale,
+                            layoutDpi: resolution.layoutDpi,
+                            maxInches: Math.min(3, geometry.frame.width * 0.28),
+                        }),
+                        northArrow: northArrow({
+                            declination: dec,
+                            layoutDpi: resolution.layoutDpi,
+                            heightInches: strip * 0.82,
+                        }),
+                    },
                     meta: {
                         title: body.title,
                         incident: body.incident,
@@ -212,6 +233,7 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         gridZone: grid
                             ? `UTM ${zone}${bandFor(center[1])} \u00b7 ${interval} m`
                             : undefined,
+                        agency: body.furniture?.branding,
                         warnings: result.warnings,
                     },
                 });

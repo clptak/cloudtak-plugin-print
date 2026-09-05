@@ -63,10 +63,10 @@ At 1:24,000, one paper inch = 609.6 m. Examples with the proposed margins:
 
 | Paper | Orientation | Map area | Footprint @ 1:24,000 |
 |---|---|---|---|
-| Letter 8.5x11 | portrait | 7.5 x 9.0 in | 4.6 x 5.5 km |
-| Tabloid 11x17 | portrait | 10.0 x 15.0 in | 6.1 x 9.1 km |
-| ANSI D 22x34 | portrait | 21.0 x 32.0 in | 12.8 x 19.5 km |
-| Arch D 24x36 | portrait | 23.0 x 34.0 in | 14.0 x 20.7 km |
+| Letter 8.5x11 | portrait | 7.5 x 8.6 in | 4.6 x 5.2 km |
+| Tabloid 11x17 | portrait | 10.0 x 14.6 in | 6.1 x 8.9 km |
+| ANSI D 22x34 | portrait | 21.0 x 31.6 in | 12.8 x 19.3 km |
+| Arch D 24x36 | portrait | 23.0 x 33.6 in | 14.0 x 20.5 km |
 
 ---
 
@@ -422,6 +422,11 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    than two that do not meet. Verified: grid spacing on the page matches the
    ground interval at the chosen scale to within 2%.
 5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.
-6. Remaining furniture — scale bar, north arrow, declination, branding, legend.
+6. ~~Remaining furniture — scale bar, north arrow, declination, branding.~~ **Done**
+   (legend still outstanding). `lib/furniture.ts` draws a dual metric/imperial
+   scale bar sized exactly in paper inches, and the three-north diagram — true,
+   grid and magnetic — with declination from the offline World Magnetic Model.
+   The bottom margin grew to 1.9in to carry a real title block: agency, title,
+   fields, scale bar and north arrow.
 7. Fit-to-area mode.
 8. Benchmark on the target box; tune DPI ceilings and concurrency.

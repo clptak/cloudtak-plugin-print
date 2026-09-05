@@ -92,3 +92,26 @@ test('landscape swaps the page declaration', () => {
 
     assert.match(html, /@page\s*\{\s*size:\s*34in 22in;/);
 });
+
+test('a long title is truncated rather than reflowing the block', () => {
+    // A wrapping title changed the height of the whole block and pushed the
+    // scale bar and north arrow out of place, and escaped upward through the
+    // rule into the grid labels.
+    const html = build({ title: 'Assignment 3 — North Drainage, Upper Basin, Sector 4B, Extended' });
+
+    assert.match(html, /\.title \{[^}]*white-space: nowrap/s);
+    assert.match(html, /\.title \{[^}]*text-overflow: ellipsis/s);
+    assert.match(html, /\.title-block \{[^}]*overflow: hidden/s);
+});
+
+test('the agency line is set above the title when supplied', () => {
+    const html = build({ agency: 'Coconino County Sheriff — Search and Rescue' });
+
+    assert.match(html, /class="agency"/);
+    assert.match(html, /Coconino County Sheriff/);
+    assert.ok(html.indexOf('class="agency"') < html.indexOf('class="title"'));
+});
+
+test('no agency line is emitted when none is supplied', () => {
+    assert.doesNotMatch(build({ agency: undefined }), /class="agency"/);
+});

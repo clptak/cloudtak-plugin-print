@@ -18,7 +18,7 @@ export type Orientation = 'portrait' | 'landscape';
 export const PAPER_SIZES = Object.keys(PAPER) as PaperSize[];
 
 /** Default margins in inches. The bottom strip carries the title block. */
-export const MARGINS = { top: 0.5, right: 0.5, bottom: 1.5, left: 0.5 };
+export const MARGINS = { top: 0.5, right: 0.5, bottom: 1.9, left: 0.5 };
 
 /**
  * Space reserved immediately below the map frame for the bottom row of grid
