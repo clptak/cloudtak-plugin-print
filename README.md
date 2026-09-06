@@ -27,15 +27,11 @@ Not done: an overlay legend, fit-to-area mode, GeoPDF, USNG. `docs/DESIGN.md` se
 
 ## Install
 
-Three pieces: the plugin goes into CloudTAK's web build, the service becomes a
-container, and Caddy routes `/print-api` to it. All three are required — the
-plugin without the service shows an error panel, and the service without Caddy is
-unreachable from a browser.
+Three pieces: the plugin goes into CloudTAK's web build, the service becomes a container, and Caddy routes `/print-api` to it. All three are required — the plugin without the service shows an error panel, and the service without Caddy is unreachable from a browser.
 
 ### 0. Where to put this repository
 
-Clone it **beside your CloudTAK checkout, inside the stack directory** — the same
-directory holding `docker-compose.yml`:
+Clone it **beside your CloudTAK checkout, inside the stack directory** — the same directory holding `docker-compose.yml`:
 
 ```
 ~/tak-stack/
@@ -48,9 +44,7 @@ directory holding `docker-compose.yml`:
     └── service/                  <- the compose build context
 ```
 
-Compose build contexts are resolved relative to the compose file, so this layout
-is what makes `context: ./cloudtak-plugin-print/service` work. Anywhere else and
-you are editing paths.
+Compose build contexts are resolved relative to the compose file, so this layout is what makes `context: ./cloudtak-plugin-print/service` work. Anywhere else and you are editing paths.
 
 ```sh
 cd ~/tak-stack
@@ -59,8 +53,7 @@ git clone https://github.com/clptak/cloudtak-plugin-print.git
 
 ### 1. Plugin
 
-**On a deployment**, copy it into the web tree before building the API image.
-Docker will not follow a symlink out of its build context, so this is a copy:
+**On a deployment**, copy it into the web tree before building the API image. Docker will not follow a symlink out of its build context, so this is a copy:
 
 ```sh
 cd ~/tak-stack
@@ -74,8 +67,7 @@ cp -r cloudtak-plugin-print/plugin CloudTAK/api/web/plugins/print
 ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/api/web/plugins/print
 ```
 
-Note the `/plugin` suffix in both. The other plugins install their repo root; this
-one cannot, because the root also holds the service.
+Note the `/plugin` suffix in both. The other plugins install their repo root; this one cannot, because the root also holds the service.
 
 `api/web/plugins/` is gitignored, so neither leaves a mark on your CloudTAK repo.
 
@@ -92,12 +84,9 @@ docker compose build cloudtak-api && docker compose up -d cloudtak-api
 
 ### 2. Service
 
-Paste the `cloudtak-print` block from `deploy/compose.service.yml` into the
-`services:` section of your `docker-compose.yml`.
+Paste the `cloudtak-print` block from `deploy/compose.service.yml` into the `services:` section of your `docker-compose.yml`.
 
-Copy `service/.env.example` for the variable list. Only `SigningSecret` is
-strictly required — the same value the other CloudTAK services already use, which
-is how the service verifies CloudTAK's own JWTs.
+Copy `service/.env.example` for the variable list. Only `SigningSecret` is strictly required — the same value the other CloudTAK services already use, which is how the service verifies CloudTAK's own JWTs.
 
 ```sh
 docker compose build cloudtak-print
@@ -106,13 +95,9 @@ docker compose up -d cloudtak-print
 
 ### 3. Caddy
 
-Follow `deploy/Caddyfile.snippet`. It is deliberately hostname-free: you paste a
-named snippet at the top level of your Caddyfile, then add **one line** —
-`import cloudtak_print` — inside whichever site block already serves CloudTAK.
+Follow `deploy/Caddyfile.snippet`. It is deliberately hostname-free: you paste a named snippet at the top level of your Caddyfile, then add **one line** — `import cloudtak_print` — inside whichever site block already serves CloudTAK.
 
-Identify that block by its contents, not its name: it is the one containing
-`reverse_proxy cloudtak-api:5000`. Deployments call it `cloudtak.example.org`,
-`map.example.org`, `tak.example.org` — the snippet never needs to know.
+Identify that block by its contents, not its name: it is the one containing `reverse_proxy cloudtak-api:5000`. Deployments call it `cloudtak.example.org`, `map.example.org`, `tak.example.org` — the snippet never needs to know.
 
 ```sh
 docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
@@ -126,16 +111,14 @@ curl -sS https://YOURHOST/print-api/health
 curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://YOURHOST/print-api
 ```
 
-The second must report `application/json`. `text/html` means CloudTAK's SPA is
-still answering `/print-api` and the snippet is not in effect.
+The second must report `application/json`. `text/html` means CloudTAK's SPA is still answering `/print-api` and the snippet is not in effect.
 
 > Check both, not just the first. A `handle /print-api/*` matcher covers
 > `/print-api/health` but **not** the bare `/print-api` — which is the info route
 > the panel calls before anything else. The health check passes while the panel is
 > broken. The shipped snippet matches both paths; this note is why.
 
-If the build fails at `playwright install` with a download error, the network
-blocks Playwright's browser CDN. Build against the distro Chromium instead:
+If the build fails at `playwright install` with a download error, the network blocks Playwright's browser CDN. Build against the distro Chromium instead:
 
 ```sh
 docker compose build \
@@ -144,8 +127,7 @@ docker compose build \
   cloudtak-print
 ```
 
-`deploy/VPS-TESTING.md` is the full runbook for bringing this up on the VPS
-without exposing it.
+`deploy/VPS-TESTING.md` is the full runbook for bringing this up on the VPS without exposing it.
 
 ## Updating
 
@@ -153,11 +135,7 @@ without exposing it.
 ./cloudtak-plugin-print/deploy/update.sh
 ```
 
-Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what
-changed**. That distinction matters: `cloudtak-print` builds in seconds, while
-`cloudtak-api` rebuilds the entire CloudTAK web application and takes minutes of
-downtime — so a service-only change should never trigger it, and a docs-only
-change should rebuild nothing at all.
+Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what changed**. That distinction matters: `cloudtak-print` builds in seconds, while `cloudtak-api` rebuilds the entire CloudTAK web application and takes minutes of downtime — so a service-only change should never trigger it, and a docs-only change should rebuild nothing at all.
 
 | | |
 |---|---|
@@ -166,10 +144,7 @@ change should rebuild nothing at all.
 | `STACK_DIR`, `CLOUDTAK_DIR` | override the assumed layout |
 | `PRINT_HOST` | also check the public route through Caddy afterwards |
 
-It refuses to run with uncommitted changes in the repository, refuses if the paths
-do not look like a stack, and refuses to delete a plugin destination that is not a
-`.../api/web/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96
-anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
+It refuses to run with uncommitted changes in the repository, refuses if the paths do not look like a stack, and refuses to delete a plugin destination that is not a `.../api/web/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96 anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
 blocky hillshade.
 
 ## Verifying the render path
