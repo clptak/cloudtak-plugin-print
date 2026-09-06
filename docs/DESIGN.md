@@ -442,6 +442,11 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    provenance line, and the three-north diagram drops its arm-tip initials (the
    stacked legend already names all three, and at 0.4 deg of convergence the tips
    collide rather than inform). A Letter sheet at 1:24,000 gains 0.4 km of height.
+   Trimmed again to 1.15in on review: the rule across the page and the provenance
+   line both went, taking the generation timestamp off the sheet with them. Every
+   title-block field is now optional and a blank one renders as nothing --
+   placeholders belong in the panel, never on paper. Letter ends the pass at
+   4.6 x 5.7 km, from 4.6 x 5.2 km.
    Worth recording: the 'Generated' field had been silently clipped by the block's
    overflow on Letter since phase 6 — five labelled cells never fitted.
    (legend still outstanding). `lib/furniture.ts` draws a dual metric/imperial

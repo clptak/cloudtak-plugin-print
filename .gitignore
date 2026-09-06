@@ -11,3 +11,8 @@ print-job*.json
 *-job.json
 sheet*.png
 smoke*.png
+
+# Files delivered into this folder by the Claude desktop app. Working artifacts,
+# not source -- and this repo has already had one accidental `git add -A` commit
+# a large file it should not have.
+Claude outputs/
