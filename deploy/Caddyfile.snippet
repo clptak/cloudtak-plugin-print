@@ -9,15 +9,26 @@
 #
 # /print-api/ and not /print/ because CloudTAK's SPA is the catch-all handle {},
 # so a Vue route at /print would be intercepted here on a hard reload.
+#
+# The named matcher is not decoration. `handle /print-api/*` matches
+# /print-api/health but NOT the bare /print-api, which is the info route the
+# plugin calls first -- that falls through to the SPA and comes back as 200
+# text/html. A curl of /print-api/health passes while the panel is broken, so the
+# partially-correct version is worse than an obviously wrong one. Match both.
+
+# Substitute the real CloudTAK hostname -- it is map.{$PRIMARY_DOMAIN} on at least
+# one deployment, not cloudtak.{$PRIMARY_DOMAIN}.
 
 cloudtak.{$PRIMARY_DOMAIN} {
         import rsa_cert
+
+        @print path /print-api /print-api/*
 
         handle /sync/* {
                 reverse_proxy {$NODERED2_UPSTREAM:nodered}:1880
         }
 
-        handle /print-api/* {
+        handle @print {
                 reverse_proxy cloudtak-print:5010
         }
 
