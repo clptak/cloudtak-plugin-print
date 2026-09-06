@@ -266,7 +266,7 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 
 ### Data Sync invite QR
 
-Optional, selected in the panel from the Data Syncs the user is subscribed to, defaulting to the active one. Printed in the **bottom-right corner inside the neatline**, on a white card, with the Data Sync name beneath it.
+Optional, selected in the panel from the Data Syncs the user is subscribed to, defaulting to the active one. Printed in the **bottom-right corner inside the neatline**, on a white card, captioned with the incident when one was entered. The caption names the incident rather than the Data Sync because the person holding the sheet is being told which incident the code joins them to; with no incident, the code prints uncaptioned.
 
 CloudTAK already renders this QR at `GET /api/marti/missions/{guid}/qr`, as **SVG**, encoding a TAK quick-connect string built from the server's own configuration. The plugin fetches it in the browser — where the session already holds credentials — and ships the markup in the job. Reimplementing the encoding here would have produced a second source of truth for a string people scan to join a mission.
 

@@ -72,7 +72,7 @@ export const PrintRequest = Type.Object({
      */
     qr: Type.Optional(Type.Object({
         svg: Type.String({ maxLength: 200000 }),
-        /** Data Sync name, printed under the code. */
+        /** Caption printed under the code. The incident, when there is one. */
         label: Type.Optional(Type.String({ maxLength: 100 })),
     })),
 

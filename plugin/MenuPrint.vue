@@ -400,8 +400,11 @@ async function run(preview: boolean) {
         // Fetched at submit rather than on selection: the invite is stamped with a
         // token, and one minted when the panel opened could be stale by the time
         // someone has finished positioning the sheet.
+        // Captioned with the incident, not the Data Sync name: the person holding
+        // the sheet is being told which incident this code joins them to. Blank
+        // incident means the code prints uncaptioned.
         const qr = mission.value
-            ? { svg: await inviteQr(mission.value.guid), label: mission.value.name }
+            ? { svg: await inviteQr(mission.value.guid), label: incident.value || undefined }
             : undefined;
 
         const submitted = await submit({
