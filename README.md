@@ -147,6 +147,31 @@ docker compose build \
 `deploy/VPS-TESTING.md` is the full runbook for bringing this up on the VPS
 without exposing it.
 
+## Updating
+
+```sh
+./cloudtak-plugin-print/deploy/update.sh
+```
+
+Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what
+changed**. That distinction matters: `cloudtak-print` builds in seconds, while
+`cloudtak-api` rebuilds the entire CloudTAK web application and takes minutes of
+downtime — so a service-only change should never trigger it, and a docs-only
+change should rebuild nothing at all.
+
+| | |
+|---|---|
+| `--force` | rebuild both regardless |
+| `--check` | report how far behind you are, change nothing |
+| `STACK_DIR`, `CLOUDTAK_DIR` | override the assumed layout |
+| `PRINT_HOST` | also check the public route through Caddy afterwards |
+
+It refuses to run with uncommitted changes in the repository, refuses if the paths
+do not look like a stack, and refuses to delete a plugin destination that is not a
+`.../api/web/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96
+anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
+blocky hillshade.
+
 ## Verifying the render path
 
 The one genuine unknown is whether Chromium under SwiftShader gives MapLibre a working GL context on your box. Two endpoints answer that without involving tiles, styles, or CloudTAK auth, so a failure is unambiguously a Chromium problem:
