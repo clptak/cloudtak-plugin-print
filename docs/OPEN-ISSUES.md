@@ -69,7 +69,11 @@ would trade a missing overlay for an unusable sheet.
 
 ## Icons for CoT that were never drawn on screen
 
-**Status:** open, same class as the overlay-resolution bug fixed on 2026-09-06.
+**Status:** narrowed on 2026-09-06. The reported symptom -- CoT labels printing with
+no symbol under them -- turned out to be a different, larger bug in the image
+filter, now fixed: data-driven icon ids never appear literally in a style layer, so
+every one of them was being dropped. What remains below is the smaller residual
+case.
 
 `lib/harvest.ts` ships the images in `map.listImages()`. CloudTAK fills that pool
 lazily, through a `styleimagemissing` handler, as symbols actually get drawn. A CoT

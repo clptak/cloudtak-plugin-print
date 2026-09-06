@@ -194,31 +194,69 @@ async function resolveSources(map: Map, style: Record<string, unknown>) {
 }
 
 /**
- * Harvest the image pool, restricted to what the style actually references.
+ * Does this id look like one CloudTAK resolves on demand, rather than one baked
+ * into the basemap's sprite sheet?
+ *
+ * The grammar is CloudTAK's, from api/web/src/stores/modules/icons.ts:
+ *
+ *   2525C:/2525D:/2525E:<sidc>   generated with milsymbol
+ *   <base>-colored-<hex>         a recolour of another image
+ *   <iconsetUid>:<path>          an iconset icon, from Dexie or the API
+ *
+ * All three carry a colon or the -colored- marker. Basemap sprite ids
+ * ('highway-shield', 'airport-11') carry neither.
+ */
+function isOnDemandIcon(id: string): boolean {
+    return id.includes(':') || id.includes('-colored-');
+}
+
+/**
+ * Harvest the image pool.
  *
  * A live CloudTAK map holds every icon it has ever resolved, and taking all of them
- * produced an 18 MB payload for a sheet that used a few dozen. Matching against the
- * serialised layers catches ids used as literals anywhere in an expression; an id
- * assembled at runtime cannot be found this way, which is what `omitted` reports.
+ * produced an 18 MB payload for a sheet that used a few dozen -- so this ships what
+ * the sheet can actually reach, not the whole pool.
+ *
+ * Three ways an id gets in, because there are three ways a layer can name one:
+ *
+ *   1. as a literal in the style layers -- a fixed icon-image
+ *   2. as a literal in inline GeoJSON feature data -- the id lives in a property
+ *      and reaches icon-image through a data expression, so it appears nowhere in
+ *      the layers
+ *   3. by matching CloudTAK's on-demand icon grammar
+ *
+ * Rule 1 alone was the original bug: every CoT icon is chosen from feature
+ * properties, so none of them appear literally in a layer, and every one was
+ * dropped. The sheet printed labels with no symbols under them.
  */
 function harvestImages(map: Map, style: Record<string, unknown>) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    const layerText = JSON.stringify(style.layers ?? []);
+    // Layers plus any inline feature data: a data-driven icon id is a string in a
+    // feature property, so the features have to be searched as well as the layers.
+    const sources = (style.sources ?? {}) as Record<string, { data?: unknown }>;
+    const inlineData = Object.values(sources)
+        .map((source) => {
+            return source && typeof source.data === 'object' ? JSON.stringify(source.data) : '';
+        })
+        .join('');
+
+    const haystack = JSON.stringify(style.layers ?? []) + inlineData;
+
     const all = map.listImages();
-    const referenced = all.filter((id) => {
-        return layerText.includes(JSON.stringify(id));
+    const wanted = all.filter((id) => {
+        return haystack.includes(JSON.stringify(id)) || isOnDemandIcon(id);
     });
 
-    // If nothing matched, the match heuristic is the suspect rather than the style,
-    // so send the whole pool instead of printing a sheet with no icons at all.
-    const wanted = referenced.length ? referenced : all;
+    // If nothing matched at all, the matching is the suspect rather than the style,
+    // so send the whole pool rather than print a sheet with no icons.
+    const selected = wanted.length ? wanted : all;
 
     const images: HarvestedImage[] = [];
     let skipped = 0;
 
-    for (const id of wanted) {
+    for (const id of selected) {
         const image = map.getImage(id) as unknown as ImageLike | undefined;
         if (!image) { skipped++; continue; }
 
@@ -252,7 +290,7 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
     return {
         images,
         skipped,
-        omitted: referenced.length ? all.length - referenced.length : 0,
+        omitted: wanted.length ? all.length - wanted.length : 0,
     };
 }
 
