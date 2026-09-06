@@ -58,6 +58,30 @@ with the UTM grid interval it prints, and the panel computes the footprint from
 those. A duplicated margin constant is exactly how a box on screen silently stops
 matching the sheet.
 
+## Pointing the panel at the print service
+
+By default the panel calls `/print-api` on the CloudTAK origin, because Caddy routes
+that path inside the CloudTAK site block. Two situations break that, and both look
+identical from the panel — a 200 carrying `index.html` instead of JSON:
+
+- **`npm run serve`.** The vite dev server proxies `/api` to `localhost:5001` and
+  lets every other path fall through to the SPA.
+- **A deployment without `deploy/Caddyfile.snippet` installed.** CloudTAK's catch-all
+  answers `/print-api` with the app shell.
+
+Rather than patch CloudTAK's `vite.config.ts` — a tracked file, and one more thing to
+carry across a core update — set an override in the browser console:
+
+```js
+localStorage.setItem('cloudtak-print-host', 'https://cloudtak.example.org')
+```
+
+Then reload. Remove it with `localStorage.removeItem('cloudtak-print-host')`.
+
+The session token travels with the request, so the target must verify against the
+same `SigningSecret` as the CloudTAK you are logged in to. Pointing a local dev
+session at a production print service will fail auth if the secrets differ.
+
 ## harvest-console.js
 
 Kept because it is still the fastest way to reproduce a render bug against a live map

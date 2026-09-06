@@ -86,8 +86,36 @@ export type PrintRequest = {
     };
 };
 
+/**
+ * Where the print service lives.
+ *
+ * Defaults to the CloudTAK origin, because Caddy routes /print-api inside the
+ * CloudTAK site block, so in a normal deployment there is nothing to configure.
+ *
+ * The override exists for two cases that produce the same symptom -- a 200 of
+ * index.html rather than JSON. The vite dev server proxies /api and lets everything
+ * else fall through to the SPA, and a deployment that has not installed the Caddy
+ * snippet does the same thing. Setting this beats patching CloudTAK's vite config,
+ * which is a tracked file and one more thing to carry across a core update:
+ *
+ *   localStorage.setItem('cloudtak-print-host', 'https://cloudtak.example.org')
+ *
+ * The token travels with the request, so the target has to verify against the same
+ * SigningSecret as the CloudTAK this session is logged in to.
+ */
+function base(): string {
+    try {
+        const override = localStorage.getItem('cloudtak-print-host');
+        if (override) return override.replace(/\/$/, '');
+    } catch {
+        // Storage can be unavailable; fall through to the origin.
+    }
+
+    return String(serverUrl).replace(/\/$/, '');
+}
+
 function url(path: string): string {
-    return `${String(serverUrl).replace(/\/$/, '')}${path}`;
+    return `${base()}${path}`;
 }
 
 async function headers(json: boolean): Promise<Record<string, string>> {
@@ -104,7 +132,7 @@ async function headers(json: boolean): Promise<Record<string, string>> {
  * Errors from the service carry a useful message; a bare status code sends the
  * user to the container log for something the response already told us.
  */
-async function fail(res: Response): Promise<never> {
+async function fail(res: Response, target: string): Promise<never> {
     let detail = '';
 
     try {
@@ -114,44 +142,72 @@ async function fail(res: Response): Promise<never> {
         detail = await res.text().catch(() => '');
     }
 
-    throw new Error(detail || `Print service returned ${res.status}`);
+    throw new Error(detail || `Print service returned ${res.status} for ${target}`);
+}
+
+/**
+ * Parse a response that must be JSON.
+ *
+ * A dev server answering an unknown path with the SPA's index.html returns 200 with
+ * HTML, which sails past res.ok and then dies inside JSON.parse with a message about
+ * column 1 -- true, and completely useless. The likely cause is that nothing is
+ * routing /print-api at this origin, so say that instead.
+ */
+async function readJson<T>(res: Response, target: string): Promise<T> {
+    const type = res.headers.get('content-type') ?? '';
+
+    if (!type.includes('json')) {
+        const body = (await res.text().catch(() => '')).trim().slice(0, 120);
+        const looksLikeHtml = body.startsWith('<');
+
+        throw new Error(
+            `${target} returned ${res.status} ${type || 'with no content type'} instead of JSON. `
+            + (looksLikeHtml
+                ? 'That is a web page, which means nothing is routing /print-api at this origin '
+                    + '-- check the Caddy snippet, or that CloudTAK is pointed at a server where the '
+                    + 'print service is deployed.'
+                : `Body began: ${body}`),
+        );
+    }
+
+    return await res.json() as T;
 }
 
 export async function info(): Promise<PrintInfo> {
-    const res = await fetch(url('/print-api'), { headers: await headers(false) });
-    if (!res.ok) await fail(res);
+    const target = url('/print-api');
+    const res = await fetch(target, { headers: await headers(false) });
+    if (!res.ok) await fail(res, target);
 
-    return await res.json() as PrintInfo;
+    return await readJson<PrintInfo>(res, target);
 }
 
 export async function submit(body: PrintRequest): Promise<JobStatus> {
-    const res = await fetch(url('/print-api/jobs'), {
+    const target = url('/print-api/jobs');
+    const res = await fetch(target, {
         method: 'POST',
         headers: await headers(true),
         body: JSON.stringify(body),
     });
 
-    if (!res.ok) await fail(res);
+    if (!res.ok) await fail(res, target);
 
-    return await res.json() as JobStatus;
+    return await readJson<JobStatus>(res, target);
 }
 
 export async function status(job: string): Promise<JobStatus> {
-    const res = await fetch(url(`/print-api/jobs/${encodeURIComponent(job)}`), {
-        headers: await headers(false),
-    });
+    const target = url(`/print-api/jobs/${encodeURIComponent(job)}`);
+    const res = await fetch(target, { headers: await headers(false) });
 
-    if (!res.ok) await fail(res);
+    if (!res.ok) await fail(res, target);
 
-    return await res.json() as JobStatus;
+    return await readJson<JobStatus>(res, target);
 }
 
 export async function result(job: string): Promise<Blob> {
-    const res = await fetch(url(`/print-api/jobs/${encodeURIComponent(job)}/result`), {
-        headers: await headers(false),
-    });
+    const target = url(`/print-api/jobs/${encodeURIComponent(job)}/result`);
+    const res = await fetch(target, { headers: await headers(false) });
 
-    if (!res.ok) await fail(res);
+    if (!res.ok) await fail(res, target);
 
     return await res.blob();
 }
