@@ -1,6 +1,7 @@
 import type { Map } from 'maplibre-gl';
 import { db } from '../../../src/database.ts';
 import { std } from '../../../src/std.ts';
+import { stripPluginLayers } from './printlayers.ts';
 
 /**
  * Capture everything the render service needs that only exists in the browser.
@@ -298,6 +299,11 @@ export async function harvest(map: Map): Promise<Harvest> {
     // A deep clone, because resolveSources rewrites sources in place and the live
     // style object is the one the user is looking at.
     const style = JSON.parse(JSON.stringify(map.getStyle())) as Record<string, unknown>;
+
+    // The sheet box is on the map, so getStyle() returns it. Its translucent blue
+    // fill covers exactly the area being printed, and left in it washes the whole
+    // sheet blue.
+    stripPluginLayers(style);
 
     const { resolved, unresolved } = await resolveSources(map, style);
     const { images, skipped, omitted } = harvestImages(map, style);

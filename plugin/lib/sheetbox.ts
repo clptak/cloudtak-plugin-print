@@ -16,9 +16,7 @@ import type { SheetBoxState } from './geometry.ts';
 
 export type { SheetBoxState };
 
-const SOURCE = 'cloudtak-print-sheet';
-const FILL = 'cloudtak-print-sheet-fill';
-const LINE = 'cloudtak-print-sheet-line';
+import { SHEET_BOX_SOURCE as SOURCE, SHEET_BOX_FILL as FILL, SHEET_BOX_LINE as LINE } from './printlayers.ts';
 
 function feature(state: SheetBoxState) {
     return {
