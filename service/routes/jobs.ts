@@ -206,7 +206,7 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 // The strip is what is left of the bottom margin after the grid
                 // gutter and the rule. It is short by design now, which is why the
                 // north diagram runs without tip labels below.
-                const strip = MARGINS.bottom - GRID_GUTTER - 0.26;
+                const strip = MARGINS.bottom - GRID_GUTTER - 0.12;
 
                 const pdf = await composeSheet({
                     map: result.png,

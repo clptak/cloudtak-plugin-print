@@ -6,7 +6,8 @@ import { PAPER_SIZES } from './paper.js';
  * subset; the rest is here so the plugin and service agree on it from the start.
  */
 export const PrintRequest = Type.Object({
-    title: Type.String({ minLength: 1, maxLength: 200 }),
+    /** Optional: an untitled sheet prints without a title line rather than a placeholder. */
+    title: Type.Optional(Type.String({ maxLength: 200 })),
     incident: Type.Optional(Type.String({ maxLength: 100 })),
     author: Type.Optional(Type.String({ maxLength: 100 })),
 

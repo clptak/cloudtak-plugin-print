@@ -86,7 +86,7 @@
                     <TablerInput
                         v-model='title'
                         label='Title'
-                        placeholder='Assignment 3 — North Drainage'
+                        placeholder='Map Title'
                     />
                 </div>
 
@@ -94,7 +94,7 @@
                     <TablerInput
                         v-model='incident'
                         label='Incident'
-                        placeholder='24-0417'
+                        placeholder='Incident number'
                     />
                 </div>
 
@@ -102,7 +102,6 @@
                     <TablerInput
                         v-model='agency'
                         label='Agency'
-                        placeholder='Coconino County Sheriff — Search and Rescue'
                     />
                 </div>
 
@@ -138,7 +137,7 @@
                     <div class='ms-auto'>
                         <TablerButton
                             class='btn-sm me-2'
-                            :disabled='busy || !title'
+                            :disabled='busy'
                             @click='run(true)'
                         >
                             Preview
@@ -146,7 +145,7 @@
 
                         <TablerButton
                             class='btn-sm btn-primary'
-                            :disabled='busy || !title'
+                            :disabled='busy'
                             @click='run(false)'
                         >
                             Print
@@ -374,7 +373,7 @@ async function run(preview: boolean) {
         unresolved.value = captured.unresolved;
 
         const submitted = await submit({
-            title: title.value,
+            title: title.value || undefined,
             incident: incident.value || undefined,
             scale: scale.value,
             paper: {
@@ -406,7 +405,10 @@ async function run(preview: boolean) {
         }
 
         const blob = await result(submitted.job);
-        const name = `${title.value.replace(/[^\w-]+/g, '-').toLowerCase()}-${scale.value}.pdf`;
+        const stem = title.value.trim()
+            ? title.value.replace(/[^\w-]+/g, '-').toLowerCase().replace(/^-+|-+$/g, '')
+            : 'map';
+        const name = `${stem}-${scale.value}.pdf`;
 
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement('a');

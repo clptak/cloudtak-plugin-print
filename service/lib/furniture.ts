@@ -197,12 +197,20 @@ export function northArrow(opts: {
     const labelPx = mm(2.0);
     const notePx = mm(1.6);
 
-    // Room above the arms for the tip labels: an arm reaching the top of the box
-    // puts its label's ascenders outside it, and the PDF clips them.
     const tipLabels = opts.tipLabels ?? true;
-    const armPx = heightPx - (tipLabels ? labelPx * 3.4 : labelPx * 1.0);
     const originX = 0;
     const originY = heightPx - labelPx * 1.4;
+
+    /*
+     * Arm length is measured DOWN from the origin, not off the box height, so the
+     * tip can never land above the box. Deriving it from heightPx put the tip at
+     * a negative y once the tip-label allowance was removed, and the arrowhead --
+     * which reaches a further 1.4mm beyond the tip -- was clipped off the top.
+     *
+     * With tip labels this is heightPx - labelPx * 3.4, exactly as before.
+     */
+    const headroom = tipLabels ? labelPx * 2.0 : mm(1.8);
+    const armPx = originY - headroom;
 
     const arms: Array<{ bearing: number; key: string; text: string; weight: string }> = [
         { bearing: 0, key: 'TN', text: 'true north', weight: '700' },
@@ -260,11 +268,24 @@ export function northArrow(opts: {
      * tip labels collide and become unreadable exactly where precision matters.
      */
     const legendX = maxX + mm(4);
-    const lineH = labelPx * 1.35;
-    // Never above labelPx: the first line's ascenders sit outside the drawing box
-    // otherwise, and the PDF clips them. With tip labels off the arms reach higher,
-    // which is exactly when this bites.
-    const legendTop = Math.max(labelPx, originY - armPx + labelPx);
+
+    /*
+     * The legend is its own column beside the arms, so it need not start at the arm
+     * tip. Aligning it there costs the whole headroom, which on a compact sheet
+     * pushed the model note off the bottom of the box -- and that note is where an
+     * EXPIRED declination model announces itself. Start at the top instead, and
+     * never above labelPx or the first line's ascenders fall outside the box.
+     */
+    const legendTop = tipLabels
+        ? Math.max(labelPx, originY - armPx + labelPx)
+        : labelPx;
+
+    /*
+     * Line spacing yields to the box rather than the other way round: four lines
+     * (three arms plus the model note) have to fit whatever height the strip
+     * allows, and silently clipping the last one is the failure this prevents.
+     */
+    const lineH = Math.min(labelPx * 1.35, (heightPx - legendTop - notePx * 1.2) / 3);
 
     arms.forEach((arm, i) => {
         parts.push(`<text x="${legendX.toFixed(1)}" y="${(legendTop + i * lineH).toFixed(1)}"`

@@ -16,7 +16,7 @@ import { MARGINS, GRID_GUTTER } from './paper.js';
  */
 
 export type SheetMeta = {
-    title: string;
+    title?: string;
     incident?: string;
     author?: string;
     /** Scale denominator: 24000 means 1:24,000. */
@@ -24,7 +24,7 @@ export type SheetMeta = {
     /** ISO timestamp the sheet was produced. */
     generated: string;
     datum?: string;
-    /** Rendered map resolution, for the provenance line. */
+    /** Rendered map resolution. Reported with the job, not printed on the sheet. */
     dpi?: number;
     /** e.g. "UTM 12S · 1000 m". Printed so a reader knows what grid they have. */
     gridZone?: string;
@@ -81,15 +81,12 @@ export function sheetHtml(opts: SheetOptions): string {
         ? `<div class="marginalia">${embed(opts.furniture.scaleBar)}${embed(opts.furniture.northArrow)}</div>`
         : '';
 
-    const when = new Date(meta.generated);
-    const stamp = `${when.toISOString().slice(0, 16).replace('T', ' ')}Z`;
-
     // Fields are laid out as a row of labelled cells so the block stays readable
     // when a value is missing, rather than collapsing into ambiguity.
-    // Datum rides with the grid because that is what it qualifies, and the
-    // timestamp moves to the provenance line. Five labelled cells never fitted a
-    // Letter sheet -- 'Generated' was being silently clipped by the block's
-    // overflow long before the strip was compacted.
+    // Datum rides with the grid because that is what it qualifies. Five labelled
+    // cells never fitted a Letter sheet -- 'Generated' was being silently clipped
+    // by the block's overflow long before the strip was compacted, which is why
+    // the timestamp is no longer printed at all.
     const datum = meta.datum ?? 'WGS 84';
 
     const fields: Array<[string, string]> = [
@@ -167,14 +164,12 @@ export function sheetHtml(opts: SheetOptions): string {
     position: absolute;
     left: ${MARGINS.left}in;
     right: ${MARGINS.right}in;
-    bottom: 0.26in;
-    height: ${MARGINS.bottom - GRID_GUTTER - 0.26}in;
+    bottom: 0.12in;
+    height: ${MARGINS.bottom - GRID_GUTTER - 0.12}in;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
     gap: 0.28in;
-    border-top: 1pt solid #111;
-    padding-top: 0.07in;
     /* A long title used to wrap and escape upward through the rule into the grid
        labels. Nothing in this block may leave it. */
     overflow: hidden;
@@ -265,16 +260,6 @@ export function sheetHtml(opts: SheetOptions): string {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Provenance, deliberately small: it matters when someone questions a sheet
-     weeks later, and never before then. */
-  .provenance {
-    position: absolute;
-    left: ${MARGINS.left}in;
-    bottom: 0.13in;
-    font-size: 6pt;
-    color: #777;
-  }
-
   .caution {
     position: absolute;
     right: ${MARGINS.right}in;
@@ -295,7 +280,7 @@ export function sheetHtml(opts: SheetOptions): string {
     <div class="title-block">
       <div class="identity">
         ${meta.agency ? `<div class="agency">${escape(meta.agency)}</div>` : ''}
-        <div class="title">${escape(meta.title)}</div>
+        ${meta.title ? `<div class="title">${escape(meta.title)}</div>` : ''}
         <div class="fields">
           ${fields.map(([label, value]) => {
                 return `<div class="field"><span class="field-label">${escape(label)}</span>`
@@ -306,7 +291,6 @@ export function sheetHtml(opts: SheetOptions): string {
       ${drawings}
     </div>
 
-    <div class="provenance">CloudTAK Print &middot; ${escape(stamp)}${meta.dpi ? ` &middot; map imagery ${meta.dpi} dpi` : ''} &middot; north up</div>
     ${meta.warnings && meta.warnings.length
         ? `<div class="caution">INCOMPLETE: ${escape(String(meta.warnings.length))} source(s) or request(s) failed &mdash; see job warnings</div>`
         : ''}

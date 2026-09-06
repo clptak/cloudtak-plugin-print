@@ -68,7 +68,7 @@ export type JobStatus = {
 };
 
 export type PrintRequest = {
-    title: string;
+    title?: string;
     incident?: string;
     author?: string;
     scale: number;

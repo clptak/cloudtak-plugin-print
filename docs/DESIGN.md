@@ -63,10 +63,10 @@ At 1:24,000, one paper inch = 609.6 m. Examples with the proposed margins:
 
 | Paper | Orientation | Map area | Footprint @ 1:24,000 |
 |---|---|---|---|
-| Letter 8.5x11 | portrait | 7.5 x 9.2 in | 4.6 x 5.6 km |
-| Tabloid 11x17 | portrait | 10.0 x 15.2 in | 6.1 x 9.3 km |
-| ANSI D 22x34 | portrait | 21.0 x 32.2 in | 12.8 x 19.6 km |
-| Arch D 24x36 | portrait | 23.0 x 34.2 in | 14.0 x 20.8 km |
+| Letter 8.5x11 | portrait | 7.5 x 9.35 in | 4.6 x 5.7 km |
+| Tabloid 11x17 | portrait | 10.0 x 15.35 in | 6.1 x 9.4 km |
+| ANSI D 22x34 | portrait | 21.0 x 32.35 in | 12.8 x 19.7 km |
+| Arch D 24x36 | portrait | 23.0 x 34.35 in | 14.0 x 20.9 km |
 
 ---
 

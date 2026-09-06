@@ -48,8 +48,23 @@ test('the title block carries what someone needs weeks later', () => {
     assert.match(html, /24-0417/);
     assert.match(html, /1:24,000/);
     assert.match(html, /WGS 84/);
-    assert.match(html, /2026-09-04 23:05Z/);
     assert.match(html, /P\. Clifton/);
+});
+
+test('an untitled sheet prints no title line at all', () => {
+    // Every title-block field is optional. A blank one has to render as nothing --
+    // not as a placeholder, and not as an empty element holding its own height.
+    const html = build({ title: undefined, agency: undefined, incident: undefined });
+
+    assert.doesNotMatch(html, /class="title"/);
+    assert.doesNotMatch(html, /class="agency"/);
+    assert.match(html, /1:24,000/, 'scale still prints on an untitled sheet');
+});
+
+test('the sheet carries no generation timestamp', () => {
+    // It was only ever on the provenance line, which is gone: the space was worth
+    // more than a datestamp nobody reads off paper.
+    assert.doesNotMatch(build({}), /2026-09-04/);
 });
 
 test('optional fields are omitted rather than left blank', () => {
