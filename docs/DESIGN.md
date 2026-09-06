@@ -264,6 +264,20 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 
 ---
 
+### Data Sync invite QR
+
+Optional, selected in the panel from the Data Syncs the user is subscribed to, defaulting to the active one. Printed in the **bottom-right corner inside the neatline**, on a white card, with the Data Sync name beneath it.
+
+CloudTAK already renders this QR at `GET /api/marti/missions/{guid}/qr`, as **SVG**, encoding a TAK quick-connect string built from the server's own configuration. The plugin fetches it in the browser — where the session already holds credentials — and ships the markup in the job. Reimplementing the encoding here would have produced a second source of truth for a string people scan to join a mission.
+
+**Why the corner and not the margin.** A phone needs roughly 0.5 mm per module off paper, 0.6 mm to be comfortable in the field. A real invite is 39 modules across including its quiet zone, so it wants about 0.92 in square. The bottom strip is 0.44 in — a QR sized to fit it would be decorative, not scannable, and making the strip tall enough would have cost the whole margin compaction on every sheet, including the ones with no Data Sync. The corner charges only the sheets that carry an invite, and charges them about a third as much.
+
+Size is derived from the module count rather than fixed, clamped to 0.9–1.4 in, so a short invite takes a smaller bite out of the map and a long one still comes out scannable.
+
+**The markup is never echoed.** `lib/qr.ts` extracts the viewBox and the path geometry, validates the path data against a strict character set, and re-emits markup it builds itself. The service renders its sheet in a real browser, so an `<svg>` arriving with a script, an event handler or an external reference would otherwise be executing inside that page. Nothing but digits and path commands crosses the boundary.
+
+---
+
 ## 8. OPEN — proposed defaults for review
 
 ### 8.1 Paper sizes

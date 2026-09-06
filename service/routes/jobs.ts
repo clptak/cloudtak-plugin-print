@@ -10,6 +10,7 @@ import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type B
 import { zoneFor, bandFor } from '../lib/utm.js';
 import { gridSvg } from '../lib/grid.js';
 import { scaleBar, northArrow, declinationAt } from '../lib/furniture.js';
+import { parseQr, qrInches, qrSvg } from '../lib/qr.js';
 import { renderMap } from '../lib/render.js';
 import { composeSheet } from '../lib/sheet.js';
 import { smokeRender } from '../lib/browser.js';
@@ -208,11 +209,30 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 // north diagram runs without tip labels below.
                 const strip = MARGINS.bottom - GRID_GUTTER - 0.12;
 
+                // Parsed here rather than at request time so a malformed QR fails the
+                // job with a message naming the QR, instead of a schema error that
+                // says only that the body was rejected.
+                let qr: { svg: string; inches: number; label?: string } | undefined;
+
+                if (body.qr) {
+                    try {
+                        const art = parseQr(body.qr.svg);
+                        qr = {
+                            svg: qrSvg(art),
+                            inches: qrInches(art.modules),
+                            label: body.qr.label,
+                        };
+                    } catch (err) {
+                        throw new Err(400, null, `Invite QR could not be used: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                }
+
                 const pdf = await composeSheet({
                     map: result.png,
                     sheet: geometry.sheet,
                     frame: geometry.frame,
                     grid: grid?.svg,
+                    qr,
                     furniture: {
                         layoutDpi: resolution.layoutDpi,
                         scaleBar: scaleBar({

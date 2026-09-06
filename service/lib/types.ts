@@ -64,6 +64,18 @@ export const PrintRequest = Type.Object({
         data: Type.Record(Type.String(), Type.Unknown()),
     }))),
 
+    /**
+     * Mission invite QR, as SVG from CloudTAK's own
+     * GET /api/marti/missions/{guid}/qr. The plugin fetches it in the browser,
+     * where the session already has credentials; the service extracts geometry
+     * only. See lib/qr.ts.
+     */
+    qr: Type.Optional(Type.Object({
+        svg: Type.String({ maxLength: 200000 }),
+        /** Data Sync name, printed under the code. */
+        label: Type.Optional(Type.String({ maxLength: 100 })),
+    })),
+
     furniture: Type.Optional(Type.Object({
         grid: Type.Optional(Type.Union([Type.Literal('utm'), Type.Literal('none')])),
         legend: Type.Optional(Type.Boolean()),

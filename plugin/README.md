@@ -23,6 +23,7 @@ Or bake it in at image build time with the `WEB_PLUGINS` build arg on `cloudtak-
 | `lib/harvest.ts` | Captures the live style, resolves overlay sources, harvests icons |
 | `lib/sheetbox.ts` | Draws and drags the sheet box on the map |
 | `lib/geometry.ts` | The box's maths, kept pure so it can be tested |
+| `lib/missions.ts` | Data Sync list and invite-QR fetch |
 
 ## Two things worth knowing before changing this
 

@@ -78,6 +78,7 @@ export type PrintRequest = {
     format?: 'pdf' | 'png';
     style?: Record<string, unknown>;
     images?: unknown[];
+    qr?: { svg: string; label?: string };
     furniture?: {
         grid?: 'utm' | 'none';
         legend?: boolean;

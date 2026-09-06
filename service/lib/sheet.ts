@@ -45,6 +45,13 @@ export type SheetOptions = {
      * measured against, so it must not inherit the imagery's resolution cap.
      */
     grid?: string;
+    /** Mission invite QR, already parsed and re-emitted by lib/qr.ts. */
+    qr?: {
+        svg: string;
+        inches: number;
+        label?: string;
+    };
+
     /** Scale bar and north arrow, already sized in real units. */
     furniture?: {
         scaleBar?: { svg: string; widthPx: number; heightPx: number; viewBox: string };
@@ -260,6 +267,39 @@ export function sheetHtml(opts: SheetOptions): string {
     font-variant-numeric: tabular-nums;
   }
 
+  /* Bottom-right inside the neatline, on a white card so the code keeps the
+     quiet zone a scanner needs even over dark map imagery. It is a sibling of the
+     frame rather than a child so it paints above the grid, which is drawn across
+     the whole sheet. */
+  .qr {
+    position: absolute;
+    right: ${MARGINS.right + 0.12}in;
+    bottom: ${MARGINS.bottom + 0.12}in;
+    background: #fff;
+    border: 0.5pt solid #111;
+    padding: 0.05in;
+    line-height: 0;
+  }
+
+  .qr svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .qr-label {
+    line-height: 1.1;
+    margin-top: 0.04in;
+    font-size: 5.5pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .caution {
     position: absolute;
     right: ${MARGINS.right}in;
@@ -276,6 +316,10 @@ export function sheetHtml(opts: SheetOptions): string {
   <div class="sheet">
     <div class="frame"><img src="${ORIGIN}/map.png" alt=""></div>
     ${opts.grid ?? ''}
+    ${opts.qr
+        ? `<div class="qr" style="width: ${opts.qr.inches}in">${opts.qr.svg}`
+        + `${opts.qr.label ? `<div class="qr-label">${escape(opts.qr.label)}</div>` : ''}</div>`
+        : ''}
 
     <div class="title-block">
       <div class="identity">

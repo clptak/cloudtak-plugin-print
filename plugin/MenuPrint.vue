@@ -113,6 +113,17 @@
                     />
                 </div>
 
+                <div
+                    v-if='missionOptions.length > 1'
+                    class='my-2'
+                >
+                    <TablerEnum
+                        v-model='missionLabel'
+                        label='Data Sync Invite QR'
+                        :options='missionOptions'
+                    />
+                </div>
+
                 <!--
                     An overlay the service cannot resolve is dropped silently on its
                     side, which is how a sheet comes back missing the one layer the
@@ -197,9 +208,12 @@ import { useMapStore } from '../../src/stores/map.ts';
 import { info as fetchInfo, submit, wait, result } from './lib/api.ts';
 import type { PrintInfo, JobStatus } from './lib/api.ts';
 import { harvest } from './lib/harvest.ts';
+import { missions, inviteQr } from './lib/missions.ts';
+import type { MissionOption } from './lib/missions.ts';
 import { SheetBox } from './lib/sheetbox.ts';
 
 const CUSTOM = 'Custom…';
+const NO_MISSION = 'None';
 const M_PER_INCH = 0.0254;
 
 const mapStore = useMapStore();
@@ -226,6 +240,8 @@ const incident = ref('');
 const agency = ref('');
 
 const centre = ref<[number, number]>([0, 0]);
+const missionList = ref<MissionOption[]>([]);
+const missionLabel = ref(NO_MISSION);
 const unresolved = ref<string[]>([]);
 
 let box: SheetBox | undefined;
@@ -260,6 +276,15 @@ const qualityOptions = computed(() => {
             const name = dpi <= 100 ? 'Draft' : dpi <= 150 ? 'Field' : dpi <= 200 ? 'Standard' : 'Plotter';
             return `${name} — ${dpi} DPI`;
         });
+});
+
+const missionOptions = computed(() => {
+    return [NO_MISSION, ...missionList.value.map((entry) => entry.name)];
+});
+
+const mission = computed(() => {
+    if (missionLabel.value === NO_MISSION) return undefined;
+    return missionList.value.find((entry) => entry.name === missionLabel.value);
 });
 
 const dpi = computed(() => {
@@ -372,6 +397,13 @@ async function run(preview: boolean) {
         const captured = harvest(mapStore.map);
         unresolved.value = captured.unresolved;
 
+        // Fetched at submit rather than on selection: the invite is stamped with a
+        // token, and one minted when the panel opened could be stale by the time
+        // someone has finished positioning the sheet.
+        const qr = mission.value
+            ? { svg: await inviteQr(mission.value.guid), label: mission.value.name }
+            : undefined;
+
         const submitted = await submit({
             title: title.value || undefined,
             incident: incident.value || undefined,
@@ -386,6 +418,7 @@ async function run(preview: boolean) {
             dpi: preview ? 72 : dpi.value,
             style: captured.style,
             images: captured.images,
+            qr,
             furniture: {
                 grid: 'utm',
                 branding: agency.value || undefined,
@@ -435,6 +468,23 @@ onMounted(async () => {
 
         if (!qualityOptions.value.includes(qualityLabel.value)) {
             qualityLabel.value = qualityOptions.value[qualityOptions.value.length - 1] ?? qualityLabel.value;
+        }
+
+        // The active Data Sync is the one the user is working, so it is the
+        // sensible default -- but never a forced one, hence None in the list.
+        try {
+            missionList.value = await missions();
+
+            const active = mapStore.mission?.meta?.guid;
+            const match = active
+                ? missionList.value.find((entry) => entry.guid === active)
+                : undefined;
+
+            if (match) missionLabel.value = match.name;
+        } catch {
+            // A user with no Data Syncs, or a database that is not ready, should
+            // still get a print panel.
+            missionList.value = [];
         }
 
         const current = mapStore.map.getCenter();
