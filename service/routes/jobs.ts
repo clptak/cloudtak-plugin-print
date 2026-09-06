@@ -4,7 +4,7 @@ import { Type } from '@sinclair/typebox';
 import auth, { tokenFrom } from '../lib/auth.js';
 import config from '../lib/config.js';
 import { PrintRequest, JobStatus } from '../lib/types.js';
-import { sheet, footprint, MARGINS } from '../lib/paper.js';
+import { sheet, footprint, MARGINS, GRID_GUTTER } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
 import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type BBox } from '../lib/geo.js';
 import { zoneFor, bandFor } from '../lib/utm.js';
@@ -203,7 +203,10 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 // not print a bearing computed months ago.
                 const dec = declinationAt(center[0], center[1], zone);
 
-                const strip = MARGINS.bottom - 0.45 - 0.26;
+                // The strip is what is left of the bottom margin after the grid
+                // gutter and the rule. It is short by design now, which is why the
+                // north diagram runs without tip labels below.
+                const strip = MARGINS.bottom - GRID_GUTTER - 0.26;
 
                 const pdf = await composeSheet({
                     map: result.png,
@@ -220,7 +223,8 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         northArrow: northArrow({
                             declination: dec,
                             layoutDpi: resolution.layoutDpi,
-                            heightInches: strip * 0.82,
+                            heightInches: strip * 0.98,
+                            tipLabels: false,
                         }),
                     },
                     meta: {

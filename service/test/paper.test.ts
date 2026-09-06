@@ -13,7 +13,7 @@ test('margins are subtracted from the frame, and orientation swaps the sheet', (
     assert.deepEqual(portrait.sheet, { width: 24, height: 36 });
     assert.equal(portrait.frame.width, 23);
     // The bottom margin carries the title block, scale bar and north arrow.
-    assert.ok(Math.abs(portrait.frame.height - 33.6) < 1e-9, String(portrait.frame.height));
+    assert.ok(Math.abs(portrait.frame.height - 34.2) < 1e-9, String(portrait.frame.height));
 
     const landscape = sheet('arch-d', 'landscape');
     assert.deepEqual(landscape.sheet, { width: 36, height: 24 });
@@ -23,14 +23,14 @@ test('Arch D at 1:24,000 matches the footprint quoted in docs/DESIGN.md', () => 
     const ground = footprint('arch-d', 'portrait', 24000);
 
     assert.equal(Math.round(ground.width / 100) / 10, 14.0);
-    assert.equal(Math.round(ground.height / 100) / 10, 20.5);
+    assert.equal(Math.round(ground.height / 100) / 10, 20.8);
 });
 
 test('Tabloid at 1:24,000 matches the footprint quoted in docs/DESIGN.md', () => {
     const ground = footprint('tabloid', 'portrait', 24000);
 
     assert.equal(Math.round(ground.width / 100) / 10, 6.1);
-    assert.equal(Math.round(ground.height / 100) / 10, 8.9);
+    assert.equal(Math.round(ground.height / 100) / 10, 9.3);
 });
 
 test('halving the scale halves the ground footprint', () => {

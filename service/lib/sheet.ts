@@ -86,13 +86,22 @@ export function sheetHtml(opts: SheetOptions): string {
 
     // Fields are laid out as a row of labelled cells so the block stays readable
     // when a value is missing, rather than collapsing into ambiguity.
+    // Datum rides with the grid because that is what it qualifies, and the
+    // timestamp moves to the provenance line. Five labelled cells never fitted a
+    // Letter sheet -- 'Generated' was being silently clipped by the block's
+    // overflow long before the strip was compacted.
+    const datum = meta.datum ?? 'WGS 84';
+
     const fields: Array<[string, string]> = [
         ['Scale', formatScale(meta.scale)],
-        ['Datum', meta.datum ?? 'WGS 84'],
-        ['Generated', stamp],
     ];
 
-    if (meta.gridZone) fields.splice(2, 0, ['Grid', meta.gridZone]);
+    if (meta.gridZone) {
+        fields.push(['Grid', `${meta.gridZone} \u00b7 ${datum}`]);
+    } else {
+        fields.push(['Datum', datum]);
+    }
+
     if (meta.incident) fields.unshift(['Incident', meta.incident]);
     if (meta.author) fields.push(['Author', meta.author]);
 
@@ -165,7 +174,7 @@ export function sheetHtml(opts: SheetOptions): string {
     justify-content: space-between;
     gap: 0.28in;
     border-top: 1pt solid #111;
-    padding-top: 0.10in;
+    padding-top: 0.07in;
     /* A long title used to wrap and escape upward through the rule into the grid
        labels. Nothing in this block may leave it. */
     overflow: hidden;
@@ -208,7 +217,7 @@ export function sheetHtml(opts: SheetOptions): string {
   }
 
   .title {
-    font-size: 14pt;
+    font-size: 11pt;
     font-weight: 700;
     line-height: 1.1;
     letter-spacing: -0.01em;
@@ -221,19 +230,28 @@ export function sheetHtml(opts: SheetOptions): string {
 
   /* Under the title, reading left to right, so the title keeps the width it
      needs. Ranged left because it now sits below a left-aligned title. */
+  /* Label and value on one line rather than stacked: the stacked form cost an
+     extra 0.12in of sheet height on every print for no added clarity. */
   .fields {
     display: flex;
-    gap: 0.26in;
+    gap: 0.13in;
     flex: none;
     white-space: nowrap;
-    margin-top: 0.07in;
+    margin-top: 0.04in;
+    align-items: baseline;
+  }
+
+  .field {
+    display: flex;
+    align-items: baseline;
+    gap: 0.05in;
   }
 
   .field-label {
     text-align: left;
-    font-size: 6.5pt;
+    font-size: 5.5pt;
     font-weight: 700;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     color: #555;
     white-space: nowrap;
@@ -241,7 +259,7 @@ export function sheetHtml(opts: SheetOptions): string {
 
   .field-value {
     text-align: left;
-    font-size: 10.5pt;
+    font-size: 8pt;
     font-weight: 600;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -280,15 +298,15 @@ export function sheetHtml(opts: SheetOptions): string {
         <div class="title">${escape(meta.title)}</div>
         <div class="fields">
           ${fields.map(([label, value]) => {
-                return `<div><div class="field-label">${escape(label)}</div>`
-                    + `<div class="field-value">${escape(value)}</div></div>`;
+                return `<div class="field"><span class="field-label">${escape(label)}</span>`
+                    + `<span class="field-value">${escape(value)}</span></div>`;
             }).join('\n          ')}
         </div>
       </div>
       ${drawings}
     </div>
 
-    <div class="provenance">CloudTAK Print${meta.dpi ? ` &middot; map imagery ${meta.dpi} dpi` : ''} &middot; north up</div>
+    <div class="provenance">CloudTAK Print &middot; ${escape(stamp)}${meta.dpi ? ` &middot; map imagery ${meta.dpi} dpi` : ''} &middot; north up</div>
     ${meta.warnings && meta.warnings.length
         ? `<div class="caution">INCOMPLETE: ${escape(String(meta.warnings.length))} source(s) or request(s) failed &mdash; see job warnings</div>`
         : ''}

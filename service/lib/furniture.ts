@@ -179,6 +179,14 @@ export function northArrow(opts: {
     declination: Declination;
     layoutDpi: number;
     heightInches: number;
+    /**
+     * Initials at the arm tips. They need labelPx * 3.4 of clear space above the
+     * arms, which on a compact sheet is most of the drawing's height -- the arms
+     * collapse to a sliver and TN/MN collide anyway. The stacked legend already
+     * names all three, so on a short strip the tips are redundant rather than
+     * merely cramped.
+     */
+    tipLabels?: boolean;
 }): Drawing {
     const { declination: dec, layoutDpi } = opts;
     const mm = (v: number) => {
@@ -191,7 +199,8 @@ export function northArrow(opts: {
 
     // Room above the arms for the tip labels: an arm reaching the top of the box
     // puts its label's ascenders outside it, and the PDF clips them.
-    const armPx = heightPx - labelPx * 3.4;
+    const tipLabels = opts.tipLabels ?? true;
+    const armPx = heightPx - (tipLabels ? labelPx * 3.4 : labelPx * 1.0);
     const originX = 0;
     const originY = heightPx - labelPx * 1.4;
 
@@ -237,10 +246,12 @@ export function northArrow(opts: {
          * a fraction of a degree off true north, so labels at a common radius
          * overlap into an unreadable smudge exactly where the precision matters.
          */
-        const [lx, ly] = bearingPoint(arm.bearing, armPx * (arm.key === 'GN' ? 0.62 : 1));
-        parts.push(`<text x="${(originX + lx).toFixed(1)}" y="${(originY + ly - mm(1.5)).toFixed(1)}"`
-            + ` text-anchor="middle" font-family="${FONT}" font-size="${(labelPx * 0.85).toFixed(1)}"`
-            + ` font-weight="700" fill="#111">${arm.key}</text>`);
+        if (tipLabels) {
+            const [lx, ly] = bearingPoint(arm.bearing, armPx * (arm.key === 'GN' ? 0.62 : 1));
+            parts.push(`<text x="${(originX + lx).toFixed(1)}" y="${(originY + ly - mm(1.5)).toFixed(1)}"`
+                + ` text-anchor="middle" font-family="${FONT}" font-size="${(labelPx * 0.85).toFixed(1)}"`
+                + ` font-weight="700" fill="#111">${arm.key}</text>`);
+        }
     }
 
     /*
@@ -250,7 +261,10 @@ export function northArrow(opts: {
      */
     const legendX = maxX + mm(4);
     const lineH = labelPx * 1.35;
-    const legendTop = originY - armPx + labelPx;
+    // Never above labelPx: the first line's ascenders sit outside the drawing box
+    // otherwise, and the PDF clips them. With tip labels off the arms reach higher,
+    // which is exactly when this bites.
+    const legendTop = Math.max(labelPx, originY - armPx + labelPx);
 
     arms.forEach((arm, i) => {
         parts.push(`<text x="${legendX.toFixed(1)}" y="${(legendTop + i * lineH).toFixed(1)}"`

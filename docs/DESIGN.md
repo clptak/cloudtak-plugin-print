@@ -63,10 +63,10 @@ At 1:24,000, one paper inch = 609.6 m. Examples with the proposed margins:
 
 | Paper | Orientation | Map area | Footprint @ 1:24,000 |
 |---|---|---|---|
-| Letter 8.5x11 | portrait | 7.5 x 8.6 in | 4.6 x 5.2 km |
-| Tabloid 11x17 | portrait | 10.0 x 14.6 in | 6.1 x 8.9 km |
-| ANSI D 22x34 | portrait | 21.0 x 31.6 in | 12.8 x 19.3 km |
-| Arch D 24x36 | portrait | 23.0 x 33.6 in | 14.0 x 20.5 km |
+| Letter 8.5x11 | portrait | 7.5 x 9.2 in | 4.6 x 5.6 km |
+| Tabloid 11x17 | portrait | 10.0 x 15.2 in | 6.1 x 9.3 km |
+| ANSI D 22x34 | portrait | 21.0 x 32.2 in | 12.8 x 19.6 km |
+| Arch D 24x36 | portrait | 23.0 x 34.2 in | 14.0 x 20.8 km |
 
 ---
 
@@ -434,7 +434,16 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    import the service's `paper.ts` (separate builds), so
    `service/test/sheetbox-geometry.test.ts` holds the two footprint
    implementations together instead.
-6. ~~Remaining furniture — scale bar, north arrow, declination, branding.~~ **Done**
+6. ~~Remaining furniture — scale bar, north arrow, declination, branding.~~ **Done**,
+   and compacted on 2026-09-06: the bottom margin went 1.9in -> 1.3in. Most of the
+   old strip was empty — the block is bottom-aligned, so a fixed 1.19in box held
+   about 0.6in of content. Field labels and values now share a line instead of
+   stacking, the datum rides with the grid zone, the timestamp moved to the
+   provenance line, and the three-north diagram drops its arm-tip initials (the
+   stacked legend already names all three, and at 0.4 deg of convergence the tips
+   collide rather than inform). A Letter sheet at 1:24,000 gains 0.4 km of height.
+   Worth recording: the 'Generated' field had been silently clipped by the block's
+   overflow on Letter since phase 6 — five labelled cells never fitted.
    (legend still outstanding). `lib/furniture.ts` draws a dual metric/imperial
    scale bar sized exactly in paper inches, and the three-north diagram — true,
    grid and magnetic — with declination from the offline World Magnetic Model.
