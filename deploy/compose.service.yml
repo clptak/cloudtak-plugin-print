@@ -1,4 +1,16 @@
-# Paste into the tak-stack docker-compose.yml services block.
+# Paste into your docker-compose.yml services block.
+#
+# The build context is relative to the compose file, which assumes this repository
+# is cloned beside your CloudTAK checkout in the stack directory:
+#
+#   ~/tak-stack/
+#   ├── docker-compose.yml
+#   ├── CloudTAK/
+#   └── cloudtak-plugin-print/
+#
+# A stack that addresses its checkouts absolutely can substitute its own
+# convention -- for example ${HOME_DIRECTORY_PATH}/tak-stack/... -- as long as the
+# path ends at this repository's service/ directory.
 #
 # Port 5010, not 5003 — cloudtak-events already publishes 5003.
 #
@@ -14,7 +26,7 @@
   cloudtak-print:
     container_name: cloudtak-print
     build:
-      context: ${HOME_DIRECTORY_PATH}/tak-stack/cloudtak-plugin-print/service
+      context: ./cloudtak-plugin-print/service
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:

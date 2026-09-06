@@ -191,8 +191,10 @@ touched, and no CloudTAK data was written.
 ## Going live (later, not now)
 
 1. Change `ports:` back to `expose:`.
-2. Add the `handle /print-api/*` block from `deploy/Caddyfile.snippet` to the
-   existing `cloudtak.{$PRIMARY_DOMAIN}` site block.
+2. Follow `deploy/Caddyfile.snippet`: paste the `(cloudtak_print)` snippet at the
+   top level of the Caddyfile, then add `import cloudtak_print` inside whichever
+   site block already serves CloudTAK — the one containing
+   `reverse_proxy cloudtak-api:5000`.
 3. `docker compose up -d cloudtak-print && docker compose restart caddy`.
 
 Only do this once the plugin UI exists and there is a reason for a browser to

@@ -1,38 +1,71 @@
-# Add to the EXISTING cloudtak.{$PRIMARY_DOMAIN} site block, alongside the
-# handle /sync/* block that is already there.
+# Caddy configuration for cloudtak-plugin-print.
 #
-# Same-origin path rather than a print. subdomain because:
-#   - the cloudtak site block has no forward_auth, so XHR never meets Authentik
+# Two steps. Neither one mentions your hostname, because every deployment names
+# CloudTAK differently -- cloudtak.example.org, map.example.org, tak.example.org.
+#
+#
+# STEP 1 -- paste this snippet at the TOP LEVEL of your Caddyfile, outside every
+# site block, next to your other snippet definitions such as (rsa_cert).
+
+(cloudtak_print) {
+        # Both, not just /print-api/*. A path matcher of /print-api/* does NOT
+        # match the bare /print-api, which is the info route the print panel calls
+        # first -- it would fall through to CloudTAK's catch-all and come back as a
+        # 200 of index.html. curl /print-api/health would pass the whole time.
+        @cloudtak_print path /print-api /print-api/*
+
+        handle @cloudtak_print {
+                reverse_proxy cloudtak-print:5010
+        }
+}
+
+# STEP 2 -- add one line inside the site block that already serves CloudTAK.
+#
+# Identify that block by its contents rather than its name: it is the one
+# containing `reverse_proxy cloudtak-api:5000`.
+#
+#     yourhost.example.org {
+#             import rsa_cert
+#
+#             import cloudtak_print          <-- add this
+#
+#             handle {
+#                     reverse_proxy cloudtak-api:5000
+#             }
+#     }
+#
+# Caddy sorts handle blocks by path specificity, so the catch-all is evaluated
+# last wherever you put the import; `caddy adapt` produces an identical route
+# order either way (verified on Caddy 2.6.2). Putting it above the catch-all is
+# still the clearer read.
+#
+#
+# Then:
+#
+#     docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
+#     docker compose exec caddy caddy reload   --config /etc/caddy/Caddyfile
+#
+# `reload` refuses a bad config and leaves the running one untouched.
+#
+# Check BOTH paths afterwards. The health route passing proves only that
+# /print-api/<something> routes, which is not what the panel calls first:
+#
+#     curl -sS https://YOURHOST/print-api/health
+#     curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://YOURHOST/print-api
+#
+# The second must report application/json. text/html means CloudTAK's SPA is
+# still answering and the snippet is not in effect.
+#
+#
+# WHY A SAME-ORIGIN PATH rather than a print.* subdomain:
+#
+#   - the CloudTAK site block has no forward_auth, so XHR never meets Authentik
 #     and never gets a 302 into a login page
 #   - CSP connect-src 'self' already covers it (see api/nginx.conf.js)
 #   - no new certificate, no new DNS record
 #
-# /print-api/ and not /print/ because CloudTAK's SPA is the catch-all handle {},
+# /print-api and not /print because CloudTAK's SPA is the catch-all handle {},
 # so a Vue route at /print would be intercepted here on a hard reload.
 #
-# The named matcher is not decoration. `handle /print-api/*` matches
-# /print-api/health but NOT the bare /print-api, which is the info route the
-# plugin calls first -- that falls through to the SPA and comes back as 200
-# text/html. A curl of /print-api/health passes while the panel is broken, so the
-# partially-correct version is worse than an obviously wrong one. Match both.
-
-# Substitute the real CloudTAK hostname -- it is map.{$PRIMARY_DOMAIN} on at least
-# one deployment, not cloudtak.{$PRIMARY_DOMAIN}.
-
-cloudtak.{$PRIMARY_DOMAIN} {
-        import rsa_cert
-
-        @print path /print-api /print-api/*
-
-        handle /sync/* {
-                reverse_proxy {$NODERED2_UPSTREAM:nodered}:1880
-        }
-
-        handle @print {
-                reverse_proxy cloudtak-print:5010
-        }
-
-        handle {
-                reverse_proxy cloudtak-api:5000
-        }
-}
+# Caddy reaches cloudtak-print by container name, so Caddy and the print service
+# must share a Docker network. In the tak-stack compose file they already do.

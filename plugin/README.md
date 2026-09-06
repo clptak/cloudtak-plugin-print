@@ -73,7 +73,7 @@ Rather than patch CloudTAK's `vite.config.ts` — a tracked file, and one more t
 carry across a core update — set an override in the browser console:
 
 ```js
-localStorage.setItem('cloudtak-print-host', 'https://cloudtak.example.org')
+localStorage.setItem('cloudtak-print-host', 'https://YOURHOST')
 ```
 
 Then reload. Remove it with `localStorage.removeItem('cloudtak-print-host')`.

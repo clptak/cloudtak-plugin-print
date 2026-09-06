@@ -368,13 +368,23 @@ Notes:
 
 ### Caddy
 
-Inside the existing `cloudtak.{$PRIMARY_DOMAIN}` site block, alongside `handle /sync/*`:
+Shipped as an importable snippet so no deployment has to copy a hostname. At the top level of the Caddyfile:
 
 ```caddyfile
-        handle /print-api/* {
+(cloudtak_print) {
+        @cloudtak_print path /print-api /print-api/*
+
+        handle @cloudtak_print {
                 reverse_proxy cloudtak-print:5010
         }
+}
 ```
+
+Then one line — `import cloudtak_print` — inside whichever site block already serves CloudTAK. That block is identified by its contents rather than its name: it holds `reverse_proxy cloudtak-api:5000`. Deployments call it `cloudtak.*`, `map.*`, `tak.*`; the snippet never needs to know.
+
+The matcher lists **both** `/print-api` and `/print-api/*`. A `/print-api/*` matcher does not match the bare path, which is the info route the panel calls first — it falls through to the SPA and returns a 200 of `index.html`, while `curl /print-api/health` passes throughout. That exact failure cost a debugging cycle.
+
+Caddy sorts `handle` blocks by path specificity, so the catch-all evaluates last wherever the import sits; `caddy adapt` yields an identical route order either way (verified on 2.6.2).
 
 Same-origin path rather than a subdomain, because:
 
