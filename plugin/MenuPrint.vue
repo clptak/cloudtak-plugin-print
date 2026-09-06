@@ -394,7 +394,7 @@ async function run(preview: boolean) {
     job.value = undefined;
 
     try {
-        const captured = harvest(mapStore.map);
+        const captured = await harvest(mapStore.map);
         unresolved.value = captured.unresolved;
 
         // Fetched at submit rather than on selection: the invite is stamped with a

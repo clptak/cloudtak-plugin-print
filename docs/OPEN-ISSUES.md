@@ -64,3 +64,26 @@ is then part of the base image rather than a separate layer that can fail.
 **Do not** "fix" this by reverting the layout-resolution change. That change is
 what made labels and linework printable; the two are unrelated, and going back
 would trade a missing overlay for an unusable sheet.
+
+---
+
+## Icons for CoT that were never drawn on screen
+
+**Status:** open, same class as the overlay-resolution bug fixed on 2026-09-06.
+
+`lib/harvest.ts` ships the images in `map.listImages()`. CloudTAK fills that pool
+lazily, through a `styleimagemissing` handler, as symbols actually get drawn. A CoT
+type present in the data but never rendered on screen — because it sat outside the
+viewport, or below its layer's minzoom — has no image in the pool, so it is not
+sent, and the headless render has no handler to resolve it. The symbol prints
+without its icon.
+
+Same shape as the overlay bug: the harvest reads state that depends on where the
+user happened to be looking, rather than resolving from a source of truth.
+
+The fix is probably to resolve icons the way CloudTAK does — through its iconset
+API, keyed on the CoT types actually present in the overlays being printed —
+rather than scraping the pool. Not yet attempted.
+
+Workaround until then: zoom the map so the symbols draw at least once before
+printing.

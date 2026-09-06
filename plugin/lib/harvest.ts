@@ -1,4 +1,6 @@
 import type { Map } from 'maplibre-gl';
+import { db } from '../../../src/database.ts';
+import { std } from '../../../src/std.ts';
 
 /**
  * Capture everything the render service needs that only exists in the browser.
@@ -12,7 +14,7 @@ import type { Map } from 'maplibre-gl';
  *
  *   1. `cloudtak-tilejson://<id>` overlay sources resolve through the client's Dexie
  *      database. The service has no equivalent and drops what it cannot resolve, so
- *      the resolved tile URLs have to be read off the live MapLibre source here.
+ *      the tile URLs have to be resolved here.
  *   2. Most CoT icons are never in a sprite sheet -- CloudTAK resolves them lazily
  *      per id through a `styleimagemissing` handler -- so without harvesting the
  *      image pool the sheet prints with holes where the icons should be.
@@ -73,10 +75,46 @@ function toBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
+const TILEJSON_SOURCE = /^cloudtak-tilejson:\/\/(-?\d+)\/?$/;
+
+type TileJson = {
+    tiles?: string[];
+    minzoom?: number;
+    maxzoom?: number;
+    bounds?: number[];
+    attribution?: string;
+};
+
+/**
+ * Resolve one overlay the way CloudTAK's own protocol handler does: from the
+ * overlay record, falling back to the network when no TileJSON is cached yet.
+ * See api/web/src/stores/modules/tilejson.ts.
+ *
+ * Deliberately NOT read off the live MapLibre source. A source only carries
+ * resolved tiles once MapLibre has actually fetched its TileJSON, and MapLibre
+ * only does that when the layer is in range -- so an overlay whose layers start at
+ * minzoom 14 is unresolved at screen zoom 10, gets dropped, and silently vanishes
+ * from the printed sheet. Zoom in and it prints. The overlay record does not care
+ * where the map is looking.
+ *
+ * The tile URLs come back unauthorized; the service stamps its own token onto them
+ * (setToken in service/lib/style.ts), so there is no need to reproduce CloudTAK's
+ * authorizeTileJSON here.
+ */
+async function tileJsonFor(id: number): Promise<TileJson | null> {
+    const record = await db.overlay.get(id) as { url?: string; tilejson?: TileJson } | undefined;
+    if (!record) return null;
+
+    if (record.tilejson) return record.tilejson;
+    if (!record.url) return null;
+
+    return await std(record.url) as TileJson;
+}
+
 /**
  * Resolve browser-only source protocols to concrete tile URLs, in place.
  */
-function resolveSources(map: Map, style: Record<string, unknown>) {
+async function resolveSources(map: Map, style: Record<string, unknown>) {
     const resolved: string[] = [];
     const unresolved: string[] = [];
 
@@ -86,15 +124,37 @@ function resolveSources(map: Map, style: Record<string, unknown>) {
         const url = source.url;
         if (typeof url !== 'string' || !url.startsWith('cloudtak-')) continue;
 
-        const live = map.getSource(id) as unknown as Record<string, unknown> | undefined;
-        const tiles = live && Array.isArray(live.tiles) ? live.tiles as string[] : null;
+        const overlay = TILEJSON_SOURCE.exec(url);
 
-        // `live` has to be in the guard too: deriving `tiles` from it narrows
-        // `tiles`, not `live`, so every property read below stayed unchecked.
-        if (!live || !tiles || !tiles.length) {
+        // The overlay record first, because it is independent of where the map is
+        // looking; the live source only as a fallback for other cloudtak-*
+        // protocols, or an overlay missing from the local database.
+        let resolvedTiles: string[] | null = null;
+        let meta: TileJson | null = null;
+
+        if (overlay) {
+            try {
+                meta = await tileJsonFor(Number(overlay[1]));
+                if (meta && Array.isArray(meta.tiles) && meta.tiles.length) {
+                    resolvedTiles = meta.tiles;
+                }
+            } catch {
+                // Fall through to the live source.
+            }
+        }
+
+        const live = map.getSource(id) as unknown as Record<string, unknown> | undefined;
+
+        if (!resolvedTiles && live && Array.isArray(live.tiles) && live.tiles.length) {
+            resolvedTiles = live.tiles as string[];
+        }
+
+        if (!resolvedTiles) {
             unresolved.push(`${id} (${url})`);
             continue;
         }
+
+        const tiles = resolvedTiles;
 
         delete source.url;
         source.tiles = tiles;
@@ -106,19 +166,24 @@ function resolveSources(map: Map, style: Record<string, unknown>) {
          * raster-dem, and one bad property fails the whole render. That cost a
          * round trip to the VPS to find.
          */
-        if (live.minzoom != null) source.minzoom = live.minzoom;
-        if (live.maxzoom != null) source.maxzoom = live.maxzoom;
-        if (live.bounds) source.bounds = live.bounds;
-        if (live.attribution) source.attribution = live.attribution;
+        const minzoom = meta?.minzoom ?? live?.minzoom;
+        const maxzoom = meta?.maxzoom ?? live?.maxzoom;
+        const bounds = meta?.bounds ?? live?.bounds;
+        const attribution = meta?.attribution ?? live?.attribution;
+
+        if (minzoom != null) source.minzoom = minzoom;
+        if (maxzoom != null) source.maxzoom = maxzoom;
+        if (bounds) source.bounds = bounds;
+        if (attribution) source.attribution = attribution;
 
         if (source.type === 'vector' || source.type === 'raster') {
             // 'xyz' is the default, so only a non-default value is worth carrying.
-            if (live.scheme === 'tms') source.scheme = 'tms';
+            if (live?.scheme === 'tms') source.scheme = 'tms';
         }
         if (source.type === 'raster' || source.type === 'raster-dem') {
-            if (live.tileSize) source.tileSize = live.tileSize;
+            if (live?.tileSize) source.tileSize = live.tileSize;
         }
-        if (source.type === 'raster-dem' && live.encoding) {
+        if (source.type === 'raster-dem' && live?.encoding) {
             source.encoding = live.encoding;
         }
 
@@ -191,12 +256,12 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
     };
 }
 
-export function harvest(map: Map): Harvest {
+export async function harvest(map: Map): Promise<Harvest> {
     // A deep clone, because resolveSources rewrites sources in place and the live
     // style object is the one the user is looking at.
     const style = JSON.parse(JSON.stringify(map.getStyle())) as Record<string, unknown>;
 
-    const { resolved, unresolved } = resolveSources(map, style);
+    const { resolved, unresolved } = await resolveSources(map, style);
     const { images, skipped, omitted } = harvestImages(map, style);
 
     return {
