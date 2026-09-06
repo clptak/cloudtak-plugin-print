@@ -132,15 +132,17 @@ async function headers(json: boolean): Promise<Record<string, string>> {
  * Errors from the service carry a useful message; a bare status code sends the
  * user to the container log for something the response already told us.
  */
-async function fail(res: Response, target: string): Promise<never> {
-    let detail = '';
-
+async function describe(res: Response): Promise<string> {
     try {
         const body = await res.json() as { message?: string };
-        detail = body.message ?? '';
+        return body.message ?? '';
     } catch {
-        detail = await res.text().catch(() => '');
+        return await res.text().catch(() => '');
     }
+}
+
+async function fail(res: Response, target: string): Promise<never> {
+    const detail = await describe(res);
 
     throw new Error(detail || `Print service returned ${res.status} for ${target}`);
 }
