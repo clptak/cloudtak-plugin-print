@@ -274,7 +274,7 @@ Reasoning: Letter and Tabloid are the workhorses because they come out of an off
 
 ### 8.2 Scales
 
-1:6,000 / 1:12,000 / 1:15,840 / 1:24,000 / 1:25,000 / 1:50,000 / 1:62,500 / 1:100,000, plus custom entry. Default 1:24,000.
+**CONFIRMED 2026-09-06.** 1:6,000 / 1:12,000 / 1:15,840 / 1:24,000 / 1:25,000 / 1:50,000 / 1:62,500 / 1:100,000, plus custom entry. Default 1:24,000. 1:15,840 stays.
 
 Reasoning: 1:24,000 is the USGS quad scale and what most people's grid tools are cut for. 1:15,840 is the old inch-to-the-quarter-mile forest scale — include it or drop it, your call.
 
@@ -290,7 +290,9 @@ Reasoning: 1:24,000 is the USGS quad scale and what most people's grid tools are
 | 1:62,500 | 1000 m | 0.63 in |
 | 1:100,000 | 5000 m | 1.97 in |
 
-**The rows I am least sure about are 1:50,000 and 1:62,500.** Pure spacing math says use 2000 m there. Military convention says 1000 m at 1:50,000, and issued protractors assume it. I have followed convention over math — confirm that is what your teams expect.
+**CONFIRMED 2026-09-06 — convention, not spacing math.** Pure spacing math says 2000 m at 1:50,000 and 1:62,500. Military convention says 1000 m, and issued protractors assume it. Convention wins: a grid a team cannot measure with the tool in their pocket is worse than a slightly crowded one.
+
+Every threshold in `gridInterval()` sits on a scale in the list above, which is what lets the plugin derive the interval for a custom scale by taking the first rung at or above it — the same lookup `snapScale()` uses. That equivalence is not a coincidence to be relied on quietly; `service/test/base.test.ts` asserts it across the whole range, so moving a band or dropping a scale fails a test rather than silently printing a grid interval the panel did not advertise.
 
 ### 8.4 Output
 
@@ -421,7 +423,17 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
    the whole page, so a sheet crossing 114 deg W gets one continuous grid rather
    than two that do not meet. Verified: grid spacing on the page matches the
    ground interval at the chosen scale to within 2%.
-5. Plugin UI — menu, panel, sheet box, drag positioning, job polling.
+5. ~~Plugin UI — menu, panel, sheet box, drag positioning, job polling.~~ **Done.**
+   `plugin/index.ts` registers a `home-menu-print` route and a Print menu item;
+   `plugin/MenuPrint.vue` is the panel; `plugin/lib/harvest.ts` is the console
+   script promoted to a module; `plugin/lib/sheetbox.ts` draws and drags the
+   sheet box. The box is computed in Web Mercator rather than by offsetting
+   degrees, because the printed frame is a Mercator viewport and Mercator
+   inflates ground distance by 1/cos(latitude) — about 22% at Coconino County's
+   latitude, and wrong in a way that still looks plausible. The plugin cannot
+   import the service's `paper.ts` (separate builds), so
+   `service/test/sheetbox-geometry.test.ts` holds the two footprint
+   implementations together instead.
 6. ~~Remaining furniture — scale bar, north arrow, declination, branding.~~ **Done**
    (legend still outstanding). `lib/furniture.ts` draws a dual metric/imperial
    scale bar sized exactly in paper inches, and the three-north diagram — true,

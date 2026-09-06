@@ -1,47 +1,68 @@
 # plugin/
 
-The CloudTAK client-side plugin. Not built yet — that is phase 5.
+The CloudTAK client-side plugin.
+
+## Installation
+
+Symlink this directory — not the repository root — into the CloudTAK web tree:
+
+```sh
+ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/api/web/plugins/print
+```
+
+`api/web/plugins/` is gitignored, so this leaves no trace in the CloudTAK repo.
+Or bake it in at image build time with the `WEB_PLUGINS` build arg on `cloudtak-api`.
+
+## Layout
+
+| File | What it does |
+|---|---|
+| `index.ts` | Registers the `home-menu-print` route and the Print menu item |
+| `MenuPrint.vue` | The panel: scale, paper, orientation, title block fields, submit and poll |
+| `lib/api.ts` | Client for the print service behind `/print-api` |
+| `lib/harvest.ts` | Captures the live style, resolves overlay sources, harvests icons |
+| `lib/sheetbox.ts` | Draws and drags the sheet box on the map |
+| `lib/geometry.ts` | The box's maths, kept pure so it can be tested |
+| `harvest-console.js` | Standalone version of `lib/harvest.ts`, for debugging without a build |
+
+## Two things worth knowing before changing this
+
+### The route is referenced by name, not path
+
+`PluginAPI.menu.add()` guards with `router.hasRoute()`, which only resolves route
+**names**, while `MainMenuContents` pushes a menu item by name unless the string
+starts with `/`. So a plugin menu item must carry the route name — `home-menu-print`,
+not `/menu/print`. A path-style route is rejected before it reaches the menu, with
+nothing but a `console.warn` to say so.
+
+### The sheet box is computed in Mercator
+
+The printed frame is a Web Mercator viewport, and Mercator inflates ground distance
+by `1/cos(latitude)`. A box drawn by offsetting true ground metres would be too small
+on the map by that factor — about 22% at Coconino County's latitude. Wrong in a way
+that still looks plausible, which is why `lib/geometry.ts` is pure and tested rather
+than inlined into the MapLibre binding.
+
+The plugin ships inside CloudTAK's bundle and the service ships inside its own
+container, so they cannot share an import of the footprint maths.
+`service/test/sheetbox-geometry.test.ts` asserts the two implementations agree across
+every paper size, orientation and standard scale. If they ever drift, the box on the
+map stops describing the paper that comes off the plotter, and that test is the only
+thing that would say so.
+
+## Margins and scales come from the service
+
+The panel does not carry its own copy of the margins or the scale list. `GET
+/print-api` publishes `margins`, `gridGutter` and a `scales` table pairing each scale
+with the UTM grid interval it prints, and the panel computes the footprint from
+those. A duplicated margin constant is exactly how a box on screen silently stops
+matching the sheet.
 
 ## harvest-console.js
 
-A stand-in for the plugin's submit path, so the render service can be proven
-against a real vector basemap before any of the layout work is built on top of it.
-
-Paste it into the browser console on an open CloudTAK map. It downloads
-`print-job.json`.
-
-It does the three things that can only be done in the browser, and which the
-plugin will therefore have to do:
-
-1. **Resolves `cloudtak-tilejson://<id>` overlay sources** to concrete tile URLs.
-   Every overlay is fronted by that protocol, backed by the client's Dexie
-   database; the service has no equivalent and drops what it cannot resolve. The
-   script reads the resolved TileJSON off the live MapLibre source rather than
-   reaching into Dexie.
-2. **Harvests sprite images.** Most CoT icons are not in any sprite sheet — they
-   are resolved lazily per id through a `styleimagemissing` handler — so without
-   this the sheet renders with no icons.
-3. **Captures the style exactly as it is**, including layer visibility, filters
-   and any user tweaks. That is what makes the print match the screen.
-
-It does not harvest your auth token; mint one on the VPS.
-
-### Using it
-
-On the dev CloudTAK, with the map view open and fully loaded, showing the area you
-want:
-
-```js
-// paste the contents of harvest-console.js
-```
-
-The map is not on `window` — CloudTAK keeps it on a Pinia store
-(`defineStore('cloudtak', ...)` in `api/web/src/stores/map.ts`), so the script
-reaches it through the Vue app that Vue 3 stamps onto `#app` as `__vue_app__`.
-It caches what it finds at `window.__map`, which is also handy for poking at the
-map by hand.
-
-Then on the VPS:
+Kept because it is still the fastest way to reproduce a render bug against a live map
+without a CloudTAK build. Paste it into the browser console on an open CloudTAK map
+and it downloads `print-job.json`, which can be POSTed straight at `/print-api/jobs`:
 
 ```sh
 TOKEN=$(docker exec cloudtak-print node -e "
@@ -53,10 +74,9 @@ curl -sS -X POST http://127.0.0.1:5010/print-api/jobs \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   --data-binary @print-job.json | python3 -m json.tool
 
-# then poll, and fetch the result
 curl -sS "http://127.0.0.1:5010/print-api/jobs/<id>?token=$TOKEN" | python3 -m json.tool
-curl -sS "http://127.0.0.1:5010/print-api/jobs/<id>/result?token=$TOKEN" -o sheet.png
+curl -sS "http://127.0.0.1:5010/print-api/jobs/<id>/result?token=$TOKEN" -o sheet.pdf
 ```
 
-`warnings` on the job is the thing to read: it names any source that was dropped
-and why.
+`warnings` on the job is the thing to read: it names any source that was dropped and
+why. The plugin surfaces the same field in the panel.
