@@ -1,0 +1,14 @@
+# The image installs its own dependencies before COPY. Without this, `COPY . ./`
+# drops the host's node_modules on top of them -- a different platform's binaries
+# over the ones the image just built, Playwright's Chromium among them.
+node_modules
+dist
+
+# Never bake a developer's environment into an image whose job is to fetch URLs.
+.env
+*.log
+
+# Parity tests reach across into plugin/, which is not in this build context --
+# the service image contains the service and nothing else. They run on a developer
+# machine, where the drift they guard against is actually introduced.
+test/parity

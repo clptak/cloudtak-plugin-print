@@ -10,7 +10,7 @@
     "scripts": {
         "check": "tsc --noEmit --project tsconfig.json",
         "lint": "eslint index.ts routes/ lib/ test/",
-        "test": "tsx --test test/*.test.ts",
+        "test": "tsx --test test/*.test.ts test/parity/*.test.ts",
         "build": "tsc --project tsconfig.json",
         "dev": "tsx watch index.ts",
         "prod": "node dist/index.js"

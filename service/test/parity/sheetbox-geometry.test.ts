@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PAPER_SIZES, sheet, footprint } from '../lib/paper.js';
-import { STANDARD_SCALES } from '../lib/geo.js';
-import { groundFootprint, corners, boundsOf } from '../../plugin/lib/geometry.js';
-import type { Orientation } from '../lib/paper.js';
+import { PAPER_SIZES, sheet, footprint } from '../../lib/paper.js';
+import { STANDARD_SCALES } from '../../lib/geo.js';
+import { groundFootprint, corners, boundsOf } from '../../../plugin/lib/geometry.js';
+import type { Orientation } from '../../lib/paper.js';
 
 /**
  * The plugin draws the sheet box; the service renders the sheet. They are separate
@@ -12,6 +12,12 @@ import type { Orientation } from '../lib/paper.js';
  *
  * If these drift, the box on the map stops describing the paper that comes out of
  * the plotter, and nothing anywhere would say so.
+ *
+ * This lives under test/parity/ because it reaches across both source trees, and the
+ * service's Docker build context is service/ alone -- the plugin is simply not in
+ * that image. .dockerignore excludes this directory rather than letting `npm run
+ * check` fail on an import that cannot resolve there. It runs on a developer
+ * machine, which is where drift gets introduced in the first place.
  */
 
 const ORIENTATIONS: Orientation[] = ['portrait', 'landscape'];
