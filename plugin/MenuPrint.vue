@@ -464,8 +464,9 @@ onMounted(async () => {
         info.value = await fetchInfo();
 
         if (!paperLabel.value) {
-            // Tabloid is the workhorse: it comes out of an office printer at an ICP.
-            const preferred = info.value.paper.find((option) => option.id === 'tabloid');
+            // Letter by default: it comes out of any printer, anywhere, without
+            // anyone having to think about it.
+            const preferred = info.value.paper.find((option) => option.id === 'letter');
             paperLabel.value = (preferred ?? info.value.paper[0]).label;
         }
 
@@ -473,17 +474,10 @@ onMounted(async () => {
             qualityLabel.value = qualityOptions.value[qualityOptions.value.length - 1] ?? qualityLabel.value;
         }
 
-        // The active Data Sync is the one the user is working, so it is the
-        // sensible default -- but never a forced one, hence None in the list.
+        // Defaults to None. An invite QR covers part of the map and joins whoever
+        // scans it to a Data Sync, so it is opted into rather than out of.
         try {
             missionList.value = await missions();
-
-            const active = mapStore.mission?.meta?.guid;
-            const match = active
-                ? missionList.value.find((entry) => entry.guid === active)
-                : undefined;
-
-            if (match) missionLabel.value = match.name;
         } catch {
             // A user with no Data Syncs, or a database that is not ready, should
             // still get a print panel.

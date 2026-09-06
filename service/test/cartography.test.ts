@@ -179,3 +179,63 @@ test('an unrecognised expression mentioning zoom is left alone rather than broke
 
     assert.deepEqual((style.layers[0].paint as Record<string, unknown>)['line-width'], original);
 });
+
+/**
+ * Regression: a deployment where markScale works out to exactly 1.
+ *
+ * PRINT_LAYOUT_DPI=96 makes markScale 96/96 = 1. forPrint still runs, because the
+ * minimum line width is doing work, but scaleNumeric returns its input untouched
+ * at factor 1 -- including undefined for a property the layer never set. Writing
+ * that back produced a key holding undefined, and MapLibre rejected the whole
+ * style with
+ *
+ *     layers[61].layout.icon-size: number expected, undefined found
+ *
+ * which killed the sheet, not just the layer.
+ */
+test('a property the layer never set is not written back as undefined', () => {
+    const style = {
+        layers: [
+            { id: 'icons', type: 'symbol', layout: { 'icon-image': 'x' } },
+            { id: 'labels', type: 'symbol', layout: { 'text-field': 'y' } },
+            { id: 'edges', type: 'line', paint: { 'line-color': '#000' } },
+            { id: 'dots', type: 'circle', paint: { 'circle-color': '#000' } },
+        ],
+    };
+
+    const { style: printed } = forPrint(style, {
+        markScale: 1,
+        minLineMm: 0.2,
+        layoutDpi: 96,
+    });
+
+    const layers = printed.layers as Array<Record<string, Record<string, unknown>>>;
+
+    for (const layer of layers) {
+        for (const bag of [layer.layout ?? {}, layer.paint ?? {}]) {
+            for (const [key, value] of Object.entries(bag)) {
+                assert.notEqual(value, undefined, `${String(layer.id)}.${key} is undefined`);
+            }
+        }
+    }
+
+    // Specifically the one that was reported.
+    assert.ok(
+        !('icon-size' in (layers[0].layout ?? {})),
+        'icon-size must stay absent when the layer never declared it',
+    );
+});
+
+test('a line with no width still gets the print floor', () => {
+    // The other half of the same code path: absent properties that DO have a
+    // meaningful default must still be filled in, or hairlines never get floored.
+    const { style: printed } = forPrint(
+        { layers: [{ id: 'edges', type: 'line', paint: { 'line-color': '#000' } }] },
+        { markScale: 2, minLineMm: 0.2, layoutDpi: 200 },
+    );
+
+    const paint = (printed.layers as Array<Record<string, Record<string, unknown>>>)[0].paint;
+
+    assert.equal(typeof paint['line-width'], 'number');
+    assert.ok((paint['line-width'] as number) >= (0.2 / 25.4) * 200);
+});

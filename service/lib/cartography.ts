@@ -139,6 +139,27 @@ export function floorNumeric(value: Json, minimum: number): Json {
     );
 }
 
+/**
+ * Write a property, or remove it if there is nothing to write.
+ *
+ * Assigning undefined is not the same as leaving a property alone: the key then
+ * exists with an undefined value, and MapLibre rejects the whole style --
+ *
+ *     layers[61].layout.icon-size: number expected, undefined found
+ *
+ * which is fatal for the entire sheet, not just that layer. scaleNumeric returns
+ * its input untouched when the factor is 1, so on a deployment where markScale
+ * works out to exactly 1 every absent property on every line, circle and symbol
+ * layer was being written back as undefined.
+ */
+function put(target: Record<string, Json>, key: string, value: Json): void {
+    if (value === undefined) {
+        delete target[key];
+    } else {
+        target[key] = value;
+    }
+}
+
 export function forPrint(
     style: Record<string, unknown>,
     opts: CartographyOptions,
@@ -161,9 +182,9 @@ export function forPrint(
             const scaled = scaleNumeric(paint['line-width'], opts.markScale, 1);
             // Only apply the floor when there is one; otherwise every expression
             // picks up a pointless ["max", expr, 0] wrapper.
-            paint['line-width'] = minLinePx > 0 ? floorNumeric(scaled, minLinePx) : scaled;
+            put(paint, 'line-width', minLinePx > 0 ? floorNumeric(scaled, minLinePx) : scaled);
             if (paint['line-gap-width'] !== undefined) {
-                paint['line-gap-width'] = scaleNumeric(paint['line-gap-width'], opts.markScale, 0);
+                put(paint, 'line-gap-width', scaleNumeric(paint['line-gap-width'], opts.markScale, 0));
             }
             if (boost !== 1 && typeof paint['line-opacity'] === 'number') {
                 paint['line-opacity'] = Math.min(1, paint['line-opacity'] * boost);
@@ -172,18 +193,18 @@ export function forPrint(
         }
 
         if (layer.type === 'circle') {
-            paint['circle-radius'] = scaleNumeric(paint['circle-radius'], opts.markScale, 5);
+            put(paint, 'circle-radius', scaleNumeric(paint['circle-radius'], opts.markScale, 5));
             if (paint['circle-stroke-width'] !== undefined) {
-                paint['circle-stroke-width'] = scaleNumeric(paint['circle-stroke-width'], opts.markScale, 0);
+                put(paint, 'circle-stroke-width', scaleNumeric(paint['circle-stroke-width'], opts.markScale, 0));
             }
             touched = true;
         }
 
         if (layer.type === 'symbol') {
-            layout['text-size'] = scaleNumeric(layout['text-size'], opts.markScale, 16);
-            layout['icon-size'] = scaleNumeric(layout['icon-size'], opts.markScale, 1);
+            put(layout, 'text-size', scaleNumeric(layout['text-size'], opts.markScale, 16));
+            put(layout, 'icon-size', scaleNumeric(layout['icon-size'], opts.markScale, 1));
             if (paint['text-halo-width'] !== undefined) {
-                paint['text-halo-width'] = scaleNumeric(paint['text-halo-width'], opts.markScale, 0);
+                put(paint, 'text-halo-width', scaleNumeric(paint['text-halo-width'], opts.markScale, 0));
             }
             touched = true;
         }

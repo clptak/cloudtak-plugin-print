@@ -46,7 +46,12 @@
       - PRINT_CONCURRENCY=${PRINT_CONCURRENCY:-1}
       - PRINT_RENDER_TIMEOUT_SECONDS=${PRINT_RENDER_TIMEOUT_SECONDS:-180}
       - PRINT_MAX_DPI=${PRINT_MAX_DPI:-200}
-      - PRINT_LAYOUT_DPI=${PRINT_LAYOUT_DPI:-96}
+      # 0 means "lay out at the output resolution", which is what phase 3 fixed:
+      # laying out at 96 and enlarging gave ghost contours and blocky hillshade.
+      # It also makes markScale exactly 1, which used to write absent style
+      # properties back as undefined and get the whole style rejected. Do not set
+      # this to 96 without a reason.
+      - PRINT_LAYOUT_DPI=${PRINT_LAYOUT_DPI:-0}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:5010/print-api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
