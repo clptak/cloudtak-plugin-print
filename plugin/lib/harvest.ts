@@ -89,7 +89,9 @@ function resolveSources(map: Map, style: Record<string, unknown>) {
         const live = map.getSource(id) as unknown as Record<string, unknown> | undefined;
         const tiles = live && Array.isArray(live.tiles) ? live.tiles as string[] : null;
 
-        if (!tiles || !tiles.length) {
+        // `live` has to be in the guard too: deriving `tiles` from it narrows
+        // `tiles`, not `live`, so every property read below stayed unchecked.
+        if (!live || !tiles || !tiles.length) {
             unresolved.push(`${id} (${url})`);
             continue;
         }

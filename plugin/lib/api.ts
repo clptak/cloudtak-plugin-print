@@ -1,4 +1,4 @@
-import { serverUrl, getRuntimeToken } from '../../src/std.ts';
+import { serverUrl, getRuntimeToken } from '../../../src/std.ts';
 
 /**
  * Client for the print service.
