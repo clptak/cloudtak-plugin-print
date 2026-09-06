@@ -23,7 +23,6 @@ Or bake it in at image build time with the `WEB_PLUGINS` build arg on `cloudtak-
 | `lib/harvest.ts` | Captures the live style, resolves overlay sources, harvests icons |
 | `lib/sheetbox.ts` | Draws and drags the sheet box on the map |
 | `lib/geometry.ts` | The box's maths, kept pure so it can be tested |
-| `harvest-console.js` | Standalone version of `lib/harvest.ts`, for debugging without a build |
 
 ## Two things worth knowing before changing this
 
@@ -82,11 +81,16 @@ The session token travels with the request, so the target must verify against th
 same `SigningSecret` as the CloudTAK you are logged in to. Pointing a local dev
 session at a production print service will fail auth if the secrets differ.
 
-## harvest-console.js
+## Debugging without a build
 
-Kept because it is still the fastest way to reproduce a render bug against a live map
-without a CloudTAK build. Paste it into the browser console on an open CloudTAK map
-and it downloads `print-job.json`, which can be POSTed straight at `/print-api/jobs`:
+`tools/harvest-console.js` at the repository root is a standalone version of
+`lib/harvest.ts`. It lives outside this directory on purpose: everything under
+`plugin/` is copied into CloudTAK's web tree and linted by that project's build, and
+a plain-JS console script has no business being a hard gate on a CloudTAK image.
+
+It is still the fastest way to reproduce a render bug against a live map without a
+build. Paste it into the browser console on an open CloudTAK map and it downloads
+`print-job.json`, which can be POSTed straight at `/print-api/jobs`:
 
 ```sh
 TOKEN=$(docker exec cloudtak-print node -e "

@@ -426,7 +426,7 @@ Or bake it in at image build time via the `WEB_PLUGINS` build arg on `cloudtak-a
 5. ~~Plugin UI — menu, panel, sheet box, drag positioning, job polling.~~ **Done.**
    `plugin/index.ts` registers a `home-menu-print` route and a Print menu item;
    `plugin/MenuPrint.vue` is the panel; `plugin/lib/harvest.ts` is the console
-   script promoted to a module; `plugin/lib/sheetbox.ts` draws and drags the
+   script (now `tools/harvest-console.js`) promoted to a module; `plugin/lib/sheetbox.ts` draws and drags the
    sheet box. The box is computed in Web Mercator rather than by offsetting
    degrees, because the printed frame is a Mercator viewport and Mercator
    inflates ground distance by 1/cos(latitude) — about 22% at Coconino County's
