@@ -2,6 +2,8 @@ import type { Map } from 'maplibre-gl';
 import { db } from '../../../src/database.ts';
 import { std } from '../../../src/std.ts';
 import { stripPluginLayers } from './printlayers.ts';
+import { readPixels, drawableFrom } from './pixels.ts';
+import type { ImageEntry } from './pixels.ts';
 
 /**
  * Capture everything the render service needs that only exists in the browser.
@@ -45,22 +47,18 @@ export type Harvest = {
      * silently missing overlay.
      */
     unresolved: string[];
-    /** Images in the pool that could not be read back. */
+    /** Total images on the live map, before any selection. */
+    pool: number;
+    /**
+     * Images in the pool that could not be read back. Surfaced in the panel: a
+     * silent skip count is how every icon went missing from every sheet for a
+     * whole phase without anything saying so.
+     */
     skipped: number;
     /** Images in the pool that no layer references, and so were not sent. */
     omitted: number;
     /** Serialised payload size in bytes, for the panel to warn on. */
     bytes: number;
-};
-
-/** A MapLibre image entry, whose concrete shape varies by how it was added. */
-type ImageLike = {
-    width?: number;
-    height?: number;
-    data?: Uint8Array | Uint8ClampedArray;
-    userImage?: unknown;
-    pixelRatio?: number;
-    sdf?: boolean;
 };
 
 function toBase64(bytes: Uint8Array): string {
@@ -258,39 +256,45 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
     let skipped = 0;
 
     for (const id of selected) {
-        const image = map.getImage(id) as unknown as ImageLike | undefined;
-        if (!image) { skipped++; continue; }
+        const entry = map.getImage(id) as unknown as ImageEntry | undefined;
+        if (!entry) { skipped++; continue; }
 
-        // MapLibre hands back either an RGBAImage-like object or a bitmap.
-        const src = (image.data ? image : (image.userImage ?? image)) as ImageLike;
+        let pixels = readPixels(entry);
 
-        let width = src.width;
-        let height = src.height;
-        let data: Uint8Array | Uint8ClampedArray | undefined = src.data;
+        if (!pixels && ctx) {
+            // A bitmap or an <img> has to be drawn before it can be read.
+            const drawable = drawableFrom(entry);
 
-        if (!data && ctx && (src instanceof ImageBitmap || src instanceof HTMLImageElement)) {
-            canvas.width = width = src.width;
-            canvas.height = height = src.height;
-            ctx.clearRect(0, 0, width, height);
-            ctx.drawImage(src, 0, 0);
-            data = ctx.getImageData(0, 0, width, height).data;
+            if (drawable instanceof ImageBitmap || drawable instanceof HTMLImageElement) {
+                canvas.width = drawable.width;
+                canvas.height = drawable.height;
+                ctx.clearRect(0, 0, drawable.width, drawable.height);
+                ctx.drawImage(drawable, 0, 0);
+
+                pixels = {
+                    width: drawable.width,
+                    height: drawable.height,
+                    data: ctx.getImageData(0, 0, drawable.width, drawable.height).data,
+                };
+            }
         }
 
-        if (!data || !width || !height) { skipped++; continue; }
+        if (!pixels) { skipped++; continue; }
 
         images.push({
             id,
-            width,
-            height,
-            data: toBase64(new Uint8Array(data.buffer ?? data)),
-            pixelRatio: image.pixelRatio ?? 1,
-            sdf: !!image.sdf,
+            width: pixels.width,
+            height: pixels.height,
+            data: toBase64(new Uint8Array(pixels.data.buffer ?? pixels.data)),
+            pixelRatio: entry.pixelRatio ?? 1,
+            sdf: !!entry.sdf,
         });
     }
 
     return {
         images,
         skipped,
+        pool: all.length,
         omitted: wanted.length ? all.length - wanted.length : 0,
     };
 }
@@ -306,13 +310,14 @@ export async function harvest(map: Map): Promise<Harvest> {
     stripPluginLayers(style);
 
     const { resolved, unresolved } = await resolveSources(map, style);
-    const { images, skipped, omitted } = harvestImages(map, style);
+    const { images, skipped, pool, omitted } = harvestImages(map, style);
 
     return {
         style,
         images,
         resolved,
         unresolved,
+        pool,
         skipped,
         omitted,
         // Measured rather than estimated: the panel warns above a threshold, and a

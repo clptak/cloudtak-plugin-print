@@ -69,7 +69,15 @@ would trade a missing overlay for an unusable sheet.
 
 ## Icons for CoT that were never drawn on screen
 
-**Status:** narrowed on 2026-09-06. The reported symptom -- CoT labels printing with
+**Status:** the reported symptom was finally traced on 2026-09-08 to a port error
+in the pixel read -- MapLibre's StyleImage keeps its pixels and dimensions on
+`.data`, and the plugin was reading the entry itself, so EVERY image was skipped
+and none were ever shipped. Two earlier diagnoses (lazy pool, then the literal-id
+filter) were both wrong; the filter change was worth keeping on its own merits but
+fixed nothing here. The residual case below is still real but has never been
+observed.
+
+**Earlier status:** narrowed on 2026-09-06. The reported symptom -- CoT labels printing with
 no symbol under them -- turned out to be a different, larger bug in the image
 filter, now fixed: data-driven icon ids never appear literally in a style layer, so
 every one of them was being dropped. What remains below is the smaller residual

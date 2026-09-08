@@ -130,6 +130,13 @@
                     team needed. Say so before the job is submitted, not after.
                 -->
                 <TablerInlineAlert
+                    v-if='iconWarning'
+                    severity='warning'
+                    title='Icons may be missing'
+                    :description='iconWarning'
+                />
+
+                <TablerInlineAlert
                     v-if='unresolved.length'
                     severity='warning'
                     title='Overlays not ready'
@@ -243,6 +250,7 @@ const centre = ref<[number, number]>([0, 0]);
 const missionList = ref<MissionOption[]>([]);
 const missionLabel = ref(NO_MISSION);
 const unresolved = ref<string[]>([]);
+const iconWarning = ref('');
 
 let box: SheetBox | undefined;
 
@@ -396,6 +404,17 @@ async function run(preview: boolean) {
     try {
         const captured = await harvest(mapStore.map);
         unresolved.value = captured.unresolved;
+
+        // Say so when icons are not going to print. This going unreported is how
+        // every sheet came out with labels and no symbols for an entire phase.
+        iconWarning.value = '';
+        if (captured.pool > 0 && captured.images.length === 0) {
+            iconWarning.value = `None of the ${captured.pool} map icons could be read, so the sheet will `
+                + 'print symbols without their icons. This is a bug worth reporting.';
+        } else if (captured.skipped > 0) {
+            iconWarning.value = `${captured.skipped} of ${captured.pool} map icons could not be read and `
+                + 'will be missing from the sheet.';
+        }
 
         // Fetched at submit rather than on selection: the invite is stamped with a
         // token, and one minted when the panel opened could be stale by the time
