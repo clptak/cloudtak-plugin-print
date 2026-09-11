@@ -69,6 +69,20 @@ would trade a missing overlay for an unusable sheet.
 
 ## Icons for CoT that were never drawn on screen
 
+**Resolved 2026-09-11**, by measurement rather than reasoning. `window.__cloudtakPrint`
+on a live map reported pool 3301, shipped 30, skipped 0, and all 3271 missing ids
+were bare CoT types. The pixel read was fine; the SELECTION was wrong. A symbol
+layer names a property, not an id, so ids appear in the style document only when
+the features are inline GeoJSON and never for a vector tile source -- and a bare
+type id matches no on-demand grammar. The harvest now asks the map, via
+querySourceFeatures, which icons its features actually reference.
+
+Three diagnoses preceded this one, all from staring at printed sheets, and all
+wrong. The summary object answered it in a single round trip.
+
+**Original note, kept for the record:**
+
+
 **Status:** the reported symptom was finally traced on 2026-09-08 to a port error
 in the pixel read -- MapLibre's StyleImage keeps its pixels and dimensions on
 `.data`, and the plugin was reading the entry itself, so EVERY image was skipped

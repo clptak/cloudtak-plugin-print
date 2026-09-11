@@ -3,6 +3,8 @@ import { db } from '../../../src/database.ts';
 import { std } from '../../../src/std.ts';
 import { stripPluginLayers } from './printlayers.ts';
 import { readPixels, drawableFrom } from './pixels.ts';
+import { iconSources, iconIdsFrom } from './iconids.ts';
+import type { IconLayer } from './iconids.ts';
 import type { ImageEntry } from './pixels.ts';
 
 /**
@@ -265,6 +267,30 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
+    /*
+     * Ask the map which icons its features actually want.
+     *
+     * The style text cannot answer this. A symbol layer names a PROPERTY, not an
+     * id, so the ids appear in the style only when the features happen to be
+     * inline GeoJSON -- never for a vector tile source. A CloudTAK map preloads an
+     * image per CoT type, so the pool runs to thousands, and choosing by text
+     * ships the inline ones and drops every tile-backed one. Measured on a live
+     * map: 3301 in the pool, 30 shipped, and all 3271 missing were bare CoT types.
+     */
+    const used = new Set<string>();
+
+    for (const query of iconSources((style.layers ?? []) as IconLayer[])) {
+        try {
+            const features = map.querySourceFeatures(query.source, {
+                sourceLayer: query.sourceLayer,
+            });
+
+            iconIdsFrom(features, query.properties, used);
+        } catch {
+            // A source that is not loaded cannot be queried; the other rules stand.
+        }
+    }
+
     // Layers plus any inline feature data: a data-driven icon id is a string in a
     // feature property, so the features have to be searched as well as the layers.
     const sources = (style.sources ?? {}) as Record<string, { data?: unknown }>;
@@ -278,6 +304,12 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
 
     const all = map.listImages();
     const wanted = all.filter((id) => {
+        if (used.has(id)) return true;
+
+        // A recolour of an icon the data asked for is wanted too.
+        const base = id.includes('-colored-') ? id.slice(0, id.lastIndexOf('-colored-')) : '';
+        if (base && used.has(base)) return true;
+
         return haystack.includes(JSON.stringify(id)) || isOnDemandIcon(id);
     });
 
