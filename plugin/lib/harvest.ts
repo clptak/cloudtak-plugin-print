@@ -26,6 +26,37 @@ import type { ImageEntry } from './pixels.ts';
  *      print match the screen, which is the whole promise of the feature.
  */
 
+/**
+ * What the last harvest actually saw, parked on window for debugging.
+ *
+ * Every icon bug in this plugin so far has come down to a disagreement between
+ * what the map holds and what gets shipped, and each one was diagnosed by
+ * reasoning from a printed sheet -- twice wrongly. This is the ground truth:
+ * paste `__cloudtakPrint` into the console after a print and the answer is in it.
+ *
+ * Ids only. The pixel data is megabytes and is never what the question is about.
+ */
+export type PrintDebug = {
+    /** Images on the live map. */
+    pool: number;
+    /** Images sent to the renderer. */
+    shipped: number;
+    /** In the pool, but unreadable. Should be 0. */
+    skipped: number;
+    /** In the pool, not sent -- by selection or by being unreadable. */
+    missingIds: string[];
+    shippedIds: string[];
+    /** Overlay sources that could not be resolved, and so were dropped. */
+    unresolved: string[];
+    bytes: number;
+};
+
+declare global {
+    interface Window {
+        __cloudtakPrint?: PrintDebug;
+    }
+}
+
 export type HarvestedImage = {
     id: string;
     width: number;
@@ -59,6 +90,8 @@ export type Harvest = {
     omitted: number;
     /** Serialised payload size in bytes, for the panel to warn on. */
     bytes: number;
+    /** Ground truth for debugging, also parked on window.__cloudtakPrint. */
+    debug: PrintDebug;
 };
 
 function toBase64(bytes: Uint8Array): string {
@@ -295,6 +328,7 @@ function harvestImages(map: Map, style: Record<string, unknown>) {
         images,
         skipped,
         pool: all.length,
+        poolIds: all,
         omitted: wanted.length ? all.length - wanted.length : 0,
     };
 }
@@ -310,9 +344,21 @@ export async function harvest(map: Map): Promise<Harvest> {
     stripPluginLayers(style);
 
     const { resolved, unresolved } = await resolveSources(map, style);
-    const { images, skipped, pool, omitted } = harvestImages(map, style);
+    const { images, skipped, pool, poolIds, omitted } = harvestImages(map, style);
 
-    return {
+    const shippedIds = new Set(images.map((image) => image.id));
+
+    const debug: PrintDebug = {
+        pool,
+        shipped: images.length,
+        skipped,
+        shippedIds: [...shippedIds],
+        missingIds: poolIds.filter((id) => !shippedIds.has(id)),
+        unresolved,
+        bytes: 0,
+    };
+
+    const harvested: Harvest = {
         style,
         images,
         resolved,
@@ -320,8 +366,16 @@ export async function harvest(map: Map): Promise<Harvest> {
         pool,
         skipped,
         omitted,
+        debug,
         // Measured rather than estimated: the panel warns above a threshold, and a
         // guess would either nag on every print or miss the one that matters.
         bytes: JSON.stringify({ style, images }).length,
     };
+
+    harvested.debug.bytes = harvested.bytes;
+
+    // Ground truth for the next icon question, without a 20 MB download.
+    if (typeof window !== 'undefined') window.__cloudtakPrint = harvested.debug;
+
+    return harvested;
 }

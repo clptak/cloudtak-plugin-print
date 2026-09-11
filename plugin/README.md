@@ -82,6 +82,22 @@ The session token travels with the request, so the target must verify against th
 same `SigningSecret` as the CloudTAK you are logged in to. Pointing a local dev
 session at a production print service will fail auth if the secrets differ.
 
+## What the last harvest saw
+
+After a print, the plugin leaves a summary on `window.__cloudtakPrint`:
+
+```js
+__cloudtakPrint
+// { pool, shipped, skipped, shippedIds, missingIds, unresolved, bytes }
+```
+
+Ids only — the pixel data is megabytes and is never what the question is about.
+
+Every icon bug in this plugin has come down to a disagreement between what the map
+holds and what gets shipped, and the first two were diagnosed by reasoning from a
+printed sheet. Both diagnoses were wrong. `pool` vs `shipped` vs `missingIds`
+answers it directly.
+
 ## Debugging without a build
 
 `tools/harvest-console.js` at the repository root is a standalone version of

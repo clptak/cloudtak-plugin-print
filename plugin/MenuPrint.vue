@@ -106,6 +106,13 @@
                 </div>
 
                 <div class='my-2'>
+                    <TablerToggle
+                        v-model='grid'
+                        label='UTM Grid'
+                    />
+                </div>
+
+                <div class='my-2'>
                     <TablerEnum
                         v-model='markLabel'
                         label='Marker &amp; Label Size'
@@ -216,6 +223,7 @@ import {
     TablerInput,
     TablerAlert,
     TablerButton,
+    TablerToggle,
     TablerProgress,
     TablerInlineAlert,
 } from '@tak-ps/vue-tabler';
@@ -267,6 +275,9 @@ const paperLabel = ref('');
 const orientationLabel = ref('Portrait');
 const qualityLabel = ref('Standard — 200 DPI');
 const markLabel = ref('Normal — 100%');
+
+// On by default: the grid is the reason most of these sheets get printed.
+const grid = ref(true);
 
 const title = ref('');
 const incident = ref('');
@@ -415,6 +426,7 @@ const footprintLabel = computed(() => {
 });
 
 const gridLabel = computed(() => {
+    if (!grid.value) return 'Off';
     return gridMetres.value ? `${gridMetres.value.toLocaleString('en-US')} m` : '—';
 });
 
@@ -486,7 +498,7 @@ async function run(preview: boolean) {
             images: captured.images,
             qr,
             furniture: {
-                grid: 'utm',
+                grid: grid.value ? 'utm' : 'none',
                 branding: agency.value || undefined,
             },
         });
