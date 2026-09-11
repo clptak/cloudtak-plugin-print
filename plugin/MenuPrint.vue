@@ -107,6 +107,14 @@
 
                 <div class='my-2'>
                     <TablerEnum
+                        v-model='markLabel'
+                        label='Marker &amp; Label Size'
+                        :options='markOptions'
+                    />
+                </div>
+
+                <div class='my-2'>
+                    <TablerEnum
                         v-model='qualityLabel'
                         label='Quality'
                         :options='qualityOptions'
@@ -221,6 +229,23 @@ import { SheetBox } from './lib/sheetbox.ts';
 
 const CUSTOM = 'Custom…';
 const NO_MISSION = 'None';
+
+/*
+ * Marker and label size, as a multiplier on the size they have on screen.
+ *
+ * The renderer keeps marks at their physical screen size by default, which is
+ * right on a plotter sheet and too heavy on Letter -- the paper got smaller and
+ * the icon did not. Remembered between prints so it is set once, not every time.
+ */
+const MARK_SIZES: Array<[string, number]> = [
+    ['Smallest — 50%', 0.5],
+    ['Smaller — 75%', 0.75],
+    ['Normal — 100%', 1],
+    ['Larger — 125%', 1.25],
+    ['Largest — 150%', 1.5],
+];
+
+const MARK_KEY = 'cloudtak-print-mark-size';
 const M_PER_INCH = 0.0254;
 
 const mapStore = useMapStore();
@@ -241,6 +266,7 @@ const customScale = ref(24000);
 const paperLabel = ref('');
 const orientationLabel = ref('Portrait');
 const qualityLabel = ref('Standard — 200 DPI');
+const markLabel = ref('Normal — 100%');
 
 const title = ref('');
 const incident = ref('');
@@ -293,6 +319,23 @@ const missionOptions = computed(() => {
 const mission = computed(() => {
     if (missionLabel.value === NO_MISSION) return undefined;
     return missionList.value.find((entry) => entry.name === missionLabel.value);
+});
+
+const markOptions = MARK_SIZES.map(([label]) => label);
+
+const markSize = computed(() => {
+    const match = MARK_SIZES.find(([label]) => label === markLabel.value);
+    return match ? match[1] : 1;
+});
+
+// Remembered per browser. A failure here must never stop a print, so the read and
+// the write are both allowed to do nothing.
+watch(markLabel, (value) => {
+    try {
+        localStorage.setItem(MARK_KEY, value);
+    } catch {
+        // Private window, or storage disabled.
+    }
 });
 
 const dpi = computed(() => {
@@ -438,6 +481,7 @@ async function run(preview: boolean) {
             // A preview exists to check composition and coverage, not detail, so it
             // runs the same code path at the lowest rung on the DPI ladder.
             dpi: preview ? 72 : dpi.value,
+            markSize: markSize.value,
             style: captured.style,
             images: captured.images,
             qr,
@@ -487,6 +531,13 @@ onMounted(async () => {
             // anyone having to think about it.
             const preferred = info.value.paper.find((option) => option.id === 'letter');
             paperLabel.value = (preferred ?? info.value.paper[0]).label;
+        }
+
+        try {
+            const remembered = localStorage.getItem(MARK_KEY);
+            if (remembered && markOptions.includes(remembered)) markLabel.value = remembered;
+        } catch {
+            // Storage unavailable; the default stands.
         }
 
         if (!qualityOptions.value.includes(qualityLabel.value)) {

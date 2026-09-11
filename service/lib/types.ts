@@ -29,6 +29,13 @@ export const PrintRequest = Type.Object({
     dpi: Type.Optional(Type.Integer({ minimum: 50, maximum: 600 })),
 
     /**
+     * Multiplier on marker and label size, 1 being the size they have on screen.
+     * Marks are kept at their physical screen size by default, which reads as
+     * oversized on a small sheet. Line widths are unaffected.
+     */
+    markSize: Type.Optional(Type.Number({ minimum: 0.25, maximum: 3 })),
+
+    /**
      * Render tiny and fail fast. Same style, same sources, same code path, but a
      * postcard-sized viewport and a short timeout — so diagnosing a stuck render
      * costs a minute instead of ten. Not for producing a sheet.

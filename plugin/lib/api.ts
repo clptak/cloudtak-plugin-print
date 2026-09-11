@@ -75,6 +75,8 @@ export type PrintRequest = {
     paper: { size: string; orientation: 'portrait' | 'landscape' };
     center?: [number, number];
     dpi?: number;
+    /** Multiplier on marker and label size; 1 is their on-screen size. */
+    markSize?: number;
     format?: 'pdf' | 'png';
     style?: Record<string, unknown>;
     images?: unknown[];

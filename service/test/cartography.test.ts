@@ -239,3 +239,64 @@ test('a line with no width still gets the print floor', () => {
     assert.equal(typeof paint['line-width'], 'number');
     assert.ok((paint['line-width'] as number) >= (0.2 / 25.4) * 200);
 });
+
+test('the user multiplier moves marks and leaves lines alone', () => {
+    // markScale keeps a mark the physical size it had on screen, which reads as
+    // oversized once the sheet is small. markSize is the knob for that -- and it
+    // must not thin the basemap on the way past.
+    const style = {
+        layers: [
+            { id: 'roads', type: 'line', paint: { 'line-width': 4 } },
+            { id: 'dots', type: 'circle', paint: { 'circle-radius': 10 } },
+            {
+                id: 'cot',
+                type: 'symbol',
+                layout: { 'text-size': 16, 'icon-size': 2 },
+                paint: { 'text-halo-width': 2 },
+            },
+        ],
+    };
+
+    const { style: printed } = forPrint(style, {
+        markScale: 2,
+        markSize: 0.5,
+        minLineMm: 0,
+        layoutDpi: 192,
+    });
+
+    const layers = printed.layers as Array<Record<string, Record<string, unknown>>>;
+
+    // 4 * markScale only: the user asked for smaller marks, not thinner roads.
+    assert.equal(layers[0].paint['line-width'], 8);
+
+    // 2 * 0.5 = 1 on everything that is a mark.
+    assert.equal(layers[1].paint['circle-radius'], 10);
+    assert.equal(layers[2].layout['text-size'], 16);
+    assert.equal(layers[2].layout['icon-size'], 2);
+    assert.equal(layers[2].paint['text-halo-width'], 2, 'the halo shrinks with the text');
+});
+
+test('markSize defaults to leaving marks where they were', () => {
+    const style = { layers: [{ id: 'cot', type: 'symbol', layout: { 'icon-size': 3 } }] };
+
+    const { style: printed } = forPrint(style, { markScale: 2, minLineMm: 0, layoutDpi: 192 });
+    const layers = printed.layers as Array<Record<string, Record<string, unknown>>>;
+
+    assert.equal(layers[0].layout['icon-size'], 6, 'no markSize means markScale alone');
+});
+
+test('markSize alone is enough to make forPrint do work', () => {
+    // The early return has to account for it, or a 1.0 DPI scale with a user
+    // multiplier would silently do nothing.
+    const style = { layers: [{ id: 'cot', type: 'symbol', layout: { 'icon-size': 4 } }] };
+
+    const { style: printed } = forPrint(style, {
+        markScale: 1,
+        markSize: 0.5,
+        minLineMm: 0,
+        layoutDpi: 96,
+    });
+
+    const layers = printed.layers as Array<Record<string, Record<string, unknown>>>;
+    assert.equal(layers[0].layout['icon-size'], 2);
+});

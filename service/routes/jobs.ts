@@ -155,6 +155,7 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         // Keep marks the physical size the style author intended for a
                         // screen, now that the map is laid out at print resolution.
                         markScale: c.markScale ?? resolution.layoutDpi / 96,
+                        markSize: body.markSize,
                         minLineMm: c.minLineMm,
                         layoutDpi: resolution.layoutDpi,
                         lineOpacityBoost: c.lineOpacityBoost,

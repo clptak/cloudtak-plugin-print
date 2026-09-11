@@ -264,6 +264,14 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 
 ---
 
+### Marker and label size
+
+One control in the panel, `markSize`, multiplying marker and label size: 50% to 150%, default 100%, remembered per browser.
+
+The renderer's `markScale` is `layoutDpi / 96`, which keeps a mark at the same **physical** size it had on screen — a 24 px icon on a monitor lands at roughly 6 mm on paper whatever the sheet. That is right on Arch D and overbearing on Letter: the paper got smaller and the icon did not. `markSize` is the knob for that.
+
+It moves `icon-size`, `text-size`, `circle-radius`, `circle-stroke-width` and `text-halo-width` — the halo included, or small labels turn to mush. It deliberately does **not** move `line-width` or `line-gap-width`: roads and contours are not marks, and nobody should have to thin their basemap to shrink a label.
+
 ### Data Sync invite QR
 
 Optional, selected in the panel from the Data Syncs the user is subscribed to, defaulting to the active one. Printed in the **bottom-right corner inside the neatline**, on a white card, captioned with the incident when one was entered. The caption names the incident rather than the Data Sync because the person holding the sheet is being told which incident the code joins them to; with no incident, the code prints uncaptioned.

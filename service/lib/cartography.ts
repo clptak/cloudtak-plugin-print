@@ -22,6 +22,16 @@
 export type CartographyOptions = {
     /** Multiply mark sizes by this. Normally layoutDpi / 96. */
     markScale: number;
+    /**
+     * The user's own multiplier on markers and labels, on top of markScale.
+     *
+     * markScale keeps a mark the same PHYSICAL size it had on screen, which is
+     * reasonable on a large sheet and overbearing on Letter -- the paper shrank
+     * and the icon did not. This is the knob for that, and it deliberately does
+     * not touch line widths: roads and contours are not marks, and nobody should
+     * have to thin their basemap to shrink a label.
+     */
+    markSize?: number;
     /** Minimum printed line width in millimetres. */
     minLineMm: number;
     /** CSS pixels per inch the map is laid out at, to convert mm to px. */
@@ -167,7 +177,13 @@ export function forPrint(
     const minLinePx = (opts.minLineMm / 25.4) * opts.layoutDpi;
     const boost = opts.lineOpacityBoost ?? 1;
 
-    if (opts.markScale === 1 && minLinePx <= 0 && boost === 1) return { style, adjusted: 0 };
+    // Lines keep the DPI scale alone; markers and labels also take the user's.
+    const lineScale = opts.markScale;
+    const markScale = opts.markScale * (opts.markSize ?? 1);
+
+    if (lineScale === 1 && markScale === 1 && minLinePx <= 0 && boost === 1) {
+        return { style, adjusted: 0 };
+    }
 
     const layers = (style.layers ?? []) as Array<Record<string, unknown>>;
     let adjusted = 0;
@@ -179,12 +195,12 @@ export function forPrint(
 
         if (layer.type === 'line') {
             // Defaults from the style spec, so an unspecified width still gets a floor.
-            const scaled = scaleNumeric(paint['line-width'], opts.markScale, 1);
+            const scaled = scaleNumeric(paint['line-width'], lineScale, 1);
             // Only apply the floor when there is one; otherwise every expression
             // picks up a pointless ["max", expr, 0] wrapper.
             put(paint, 'line-width', minLinePx > 0 ? floorNumeric(scaled, minLinePx) : scaled);
             if (paint['line-gap-width'] !== undefined) {
-                put(paint, 'line-gap-width', scaleNumeric(paint['line-gap-width'], opts.markScale, 0));
+                put(paint, 'line-gap-width', scaleNumeric(paint['line-gap-width'], lineScale, 0));
             }
             if (boost !== 1 && typeof paint['line-opacity'] === 'number') {
                 paint['line-opacity'] = Math.min(1, paint['line-opacity'] * boost);
@@ -193,18 +209,20 @@ export function forPrint(
         }
 
         if (layer.type === 'circle') {
-            put(paint, 'circle-radius', scaleNumeric(paint['circle-radius'], opts.markScale, 5));
+            // A circle is a mark: CoT points render as one when they have no icon.
+            put(paint, 'circle-radius', scaleNumeric(paint['circle-radius'], markScale, 5));
             if (paint['circle-stroke-width'] !== undefined) {
-                put(paint, 'circle-stroke-width', scaleNumeric(paint['circle-stroke-width'], opts.markScale, 0));
+                put(paint, 'circle-stroke-width', scaleNumeric(paint['circle-stroke-width'], markScale, 0));
             }
             touched = true;
         }
 
         if (layer.type === 'symbol') {
-            put(layout, 'text-size', scaleNumeric(layout['text-size'], opts.markScale, 16));
-            put(layout, 'icon-size', scaleNumeric(layout['icon-size'], opts.markScale, 1));
+            put(layout, 'text-size', scaleNumeric(layout['text-size'], markScale, 16));
+            put(layout, 'icon-size', scaleNumeric(layout['icon-size'], markScale, 1));
             if (paint['text-halo-width'] !== undefined) {
-                put(paint, 'text-halo-width', scaleNumeric(paint['text-halo-width'], opts.markScale, 0));
+                // The halo has to shrink with the text or small labels turn to mush.
+                put(paint, 'text-halo-width', scaleNumeric(paint['text-halo-width'], markScale, 0));
             }
             touched = true;
         }
