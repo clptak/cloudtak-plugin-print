@@ -196,7 +196,7 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 __map?: unknown;
                 __prepared?: boolean;
                 __failed?: string;
-                __diag?: Record<string, number>;
+                __diag?: Record<string, unknown>;
                 __t0?: number;
             };
 
@@ -210,7 +210,27 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
             const pool = new Map<string, HarvestedImage>();
             for (const image of input.images) pool.set(image.id, image);
 
-            const diag = { images: input.images.length, imageMs: 0, styleMs: 0, settleMs: 0, errors: 0 };
+            /*
+             * `missing` is the render side's answer to a question the client cannot
+             * answer: which images did MapLibre actually ASK for and not find?
+             *
+             * Without it, a shipped-but-undrawn icon is indistinguishable from an
+             * unshipped one, and diagnosing the difference cost several rounds of
+             * guessing. If an id turns up here the payload never reached the map;
+             * if it does not, the map has the image and something else -- a filter,
+             * an opacity, a paint property -- is suppressing the symbol.
+             */
+            const missing: string[] = [];
+
+            const diag = {
+                images: input.images.length,
+                installed: 0,
+                imageMs: 0,
+                styleMs: 0,
+                settleMs: 0,
+                errors: 0,
+                missing,
+            };
             const t0 = Date.now();
             w.__diag = diag;
             w.__t0 = t0;
@@ -260,7 +280,9 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 diag.styleMs = Date.now() - t0;
 
                 const ti = Date.now();
-                for (const id of pool.keys()) install(id);
+                for (const id of pool.keys()) {
+                    if (install(id)) diag.installed++;
+                }
                 diag.imageMs = Date.now() - ti;
 
                 for (const overlay of input.overlays) {
@@ -284,7 +306,12 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
 
             // Covers icons requested before and after the style settles.
             map.on('styleimagemissing', (e) => {
-                install((e as { id: string }).id);
+                const id = (e as { id: string }).id;
+
+                // Recorded, not just attempted: an id MapLibre wants and the pool
+                // does not have is the single most useful fact about a sheet with
+                // a symbol missing its icon.
+                if (!install(id) && !missing.includes(id)) missing.push(id);
             });
 
             map.on('error', (e) => {
@@ -414,6 +441,40 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 return `request failed: ${f}`;
             }));
         }
+
+        /*
+         * Which images did MapLibre want that the payload did not carry?
+         *
+         * A symbol printing without its icon has two possible causes, and until
+         * this was reported there was no way to tell them apart: either the image
+         * never reached the renderer, or it did and something in the style is
+         * suppressing the symbol. An id here means the former. Silence here with
+         * an icon still missing means the latter.
+         */
+        const images = await page.evaluate(() => {
+            const w = window as unknown as {
+                __diag?: { images?: number; installed?: number; missing?: string[] };
+            };
+
+            return {
+                shipped: w.__diag?.images ?? 0,
+                installed: w.__diag?.installed ?? 0,
+                missing: w.__diag?.missing ?? [],
+            };
+        });
+
+        if (images.missing.length) {
+            warnings.push(
+                `${images.missing.length} image(s) requested but not supplied: `
+                + `${images.missing.slice(0, 12).join(', ')}`
+                + (images.missing.length > 12 ? ' …' : ''),
+            );
+        }
+
+        if (images.shipped && images.installed < images.shipped) {
+            warnings.push(`${images.shipped - images.installed} of ${images.shipped} supplied image(s) were not installed`);
+        }
+
         if (errors.length) throw new Err(502, null, `Render page error: ${errors[0]}`);
 
         return page.locator('#map').screenshot({ type: 'png' });
