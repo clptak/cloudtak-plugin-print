@@ -229,7 +229,7 @@ import {
 } from '@tak-ps/vue-tabler';
 import { useMapStore } from '../../src/stores/map.ts';
 import { info as fetchInfo, submit, wait, result } from './lib/api.ts';
-import type { PrintInfo, JobStatus } from './lib/api.ts';
+import type { PrintInfo, JobStatus, PrintRequest } from './lib/api.ts';
 import { harvest } from './lib/harvest.ts';
 import { missions, inviteQr } from './lib/missions.ts';
 import type { MissionOption } from './lib/missions.ts';
@@ -451,57 +451,68 @@ function fitToSheet() {
     mapStore.map.fitBounds(box.bounds, { padding: 40 });
 }
 
+/**
+ * The request, exactly as it would be submitted.
+ *
+ * Shared with the debug dump below so what gets saved is byte-for-byte what gets
+ * printed -- a dump built by a separate path would describe a different render,
+ * which is precisely the trap the old console harvester became.
+ */
+async function compose(preview: boolean): Promise<PrintRequest> {
+    const captured = await harvest(mapStore.map);
+    unresolved.value = captured.unresolved;
+
+    // Say so when icons are not going to print. This going unreported is how
+    // every sheet came out with labels and no symbols for an entire phase.
+    iconWarning.value = '';
+    if (captured.pool > 0 && captured.images.length === 0) {
+        iconWarning.value = `None of the ${captured.pool} map icons could be read, so the sheet will `
+            + 'print symbols without their icons. This is a bug worth reporting.';
+    } else if (captured.skipped > 0) {
+        iconWarning.value = `${captured.skipped} of ${captured.pool} map icons could not be read and `
+            + 'will be missing from the sheet.';
+    }
+
+    // Fetched at submit rather than on selection: the invite is stamped with a
+    // token, and one minted when the panel opened could be stale by the time
+    // someone has finished positioning the sheet.
+    // Captioned with the incident, not the Data Sync name: the person holding
+    // the sheet is being told which incident this code joins them to. Blank
+    // incident means the code prints uncaptioned.
+    const qr = mission.value
+        ? { svg: await inviteQr(mission.value.guid), label: incident.value || undefined }
+        : undefined;
+
+    return {
+        title: title.value || undefined,
+        incident: incident.value || undefined,
+        scale: scale.value,
+        paper: {
+            size: paper.value?.id ?? 'tabloid',
+            orientation: orientation.value,
+        },
+        center: centre.value,
+        // A preview exists to check composition and coverage, not detail, so it
+        // runs the same code path at the lowest rung on the DPI ladder.
+        dpi: preview ? 72 : dpi.value,
+        markSize: markSize.value,
+        style: captured.style,
+        images: captured.images,
+        qr,
+        furniture: {
+            grid: grid.value ? 'utm' : 'none',
+            branding: agency.value || undefined,
+        },
+    };
+}
+
 async function run(preview: boolean) {
     busy.value = true;
     jobError.value = undefined;
     job.value = undefined;
 
     try {
-        const captured = await harvest(mapStore.map);
-        unresolved.value = captured.unresolved;
-
-        // Say so when icons are not going to print. This going unreported is how
-        // every sheet came out with labels and no symbols for an entire phase.
-        iconWarning.value = '';
-        if (captured.pool > 0 && captured.images.length === 0) {
-            iconWarning.value = `None of the ${captured.pool} map icons could be read, so the sheet will `
-                + 'print symbols without their icons. This is a bug worth reporting.';
-        } else if (captured.skipped > 0) {
-            iconWarning.value = `${captured.skipped} of ${captured.pool} map icons could not be read and `
-                + 'will be missing from the sheet.';
-        }
-
-        // Fetched at submit rather than on selection: the invite is stamped with a
-        // token, and one minted when the panel opened could be stale by the time
-        // someone has finished positioning the sheet.
-        // Captioned with the incident, not the Data Sync name: the person holding
-        // the sheet is being told which incident this code joins them to. Blank
-        // incident means the code prints uncaptioned.
-        const qr = mission.value
-            ? { svg: await inviteQr(mission.value.guid), label: incident.value || undefined }
-            : undefined;
-
-        const submitted = await submit({
-            title: title.value || undefined,
-            incident: incident.value || undefined,
-            scale: scale.value,
-            paper: {
-                size: paper.value?.id ?? 'tabloid',
-                orientation: orientation.value,
-            },
-            center: centre.value,
-            // A preview exists to check composition and coverage, not detail, so it
-            // runs the same code path at the lowest rung on the DPI ladder.
-            dpi: preview ? 72 : dpi.value,
-            markSize: markSize.value,
-            style: captured.style,
-            images: captured.images,
-            qr,
-            furniture: {
-                grid: grid.value ? 'utm' : 'none',
-                branding: agency.value || undefined,
-            },
-        });
+        const submitted = await submit(await compose(preview));
 
         job.value = submitted;
 
@@ -584,7 +595,39 @@ onMounted(async () => {
     }
 });
 
+/*
+ * Save the exact request for offline debugging:
+ *
+ *     await __cloudtakPrintSave()
+ *
+ * The payload is the one that would be printed, not a reconstruction. Style tile
+ * and glyph URLs can carry a session token, so treat the file as a credential:
+ * it is gitignored as print-job.json, and it should not be shared further.
+ */
+declare global {
+    interface Window {
+        __cloudtakPrintSave?: () => Promise<string>;
+    }
+}
+
+onMounted(() => {
+    window.__cloudtakPrintSave = async () => {
+        const body = await compose(false);
+        const json = JSON.stringify(body);
+
+        const href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.download = 'print-job.json';
+        anchor.click();
+        URL.revokeObjectURL(href);
+
+        return `${(json.length / 1048576).toFixed(2)} MB, ${body.images?.length ?? 0} images`;
+    };
+});
+
 onBeforeUnmount(() => {
+    delete window.__cloudtakPrintSave;
     if (box) box.destroy();
     box = undefined;
 });
