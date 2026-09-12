@@ -241,13 +241,38 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                 addImage: (id: string, image: ImageData, opts?: unknown) => void;
                 hasImage: (id: string) => boolean;
                 getSource: (id: string) => { setData?: (d: unknown) => void } | undefined;
+                addSource: (id: string, source: unknown) => void;
+                addLayer: (layer: unknown) => void;
                 isStyleLoaded: () => boolean;
                 loaded: () => boolean;
             };
 
+            /*
+             * The map is created with the style's sources and layers held back.
+             *
+             * MapLibre decides whether a symbol gets an icon while it lays the tile
+             * out, and it only considers images the worker already knows about.
+             * Handing it the full style and adding the harvested images a moment
+             * later loses that race for whichever tiles were laid out first: the
+             * icon is dropped, the separate text layer still draws, and the sheet
+             * shows a labelled marker with no symbol -- inconsistently, because
+             * which features lose depends on which tile finished when.
+             * `styleimagemissing` never reports it, because by the time MapLibre
+             * asks the main thread the image is already installed.
+             *
+             * Installing every image against an empty style and adding the sources
+             * and layers afterwards removes the race: nothing is laid out until
+             * every icon is available.
+             */
+            const held = {
+                sources: (input.style.sources ?? {}) as Record<string, unknown>,
+                layers: (input.style.layers ?? []) as unknown[],
+            };
+            const shell = { ...input.style, sources: {}, layers: [] };
+
             const map = new MapCtor({
                 container: 'map',
-                style: input.style,
+                style: shell,
                 center: input.center,
                 zoom: input.zoom,
                 bearing: 0,
@@ -284,6 +309,19 @@ export async function renderMap(req: RenderRequest): Promise<RenderResult> {
                     if (install(id)) diag.installed++;
                 }
                 diag.imageMs = Date.now() - ti;
+
+                // Only now, with every icon in hand, does the map get anything to
+                // lay out. Sources first: a layer whose source is missing throws.
+                for (const [id, source] of Object.entries(held.sources)) map.addSource(id, source);
+                for (const layer of held.layers) map.addLayer(layer);
+
+                // Wait for the real style to settle before reporting ready, or the
+                // caller's first `loaded()` reading is of a map with nothing in it.
+                while (!map.isStyleLoaded()) {
+                    await new Promise((resolve) => {
+                        return setTimeout(resolve, 50);
+                    });
+                }
 
                 for (const overlay of input.overlays) {
                     const source = map.getSource(overlay.source);
