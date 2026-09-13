@@ -59,7 +59,7 @@ proprietary.
             /GPTS   [ lat lon lat lon lat lon lat lon ]
             /LPTS   [0 1 0 0 1 0 1 1]
             /GCS    20 0 R >>
-20 0 obj << /Type /PROJCS /EPSG 3857 /WKT (PROJCS["WGS_1984_Web_Mercator_...) >>
+20 0 obj << /Type /GEOGCS /EPSG 4326 /WKT (GEOGCS["GCS_WGS_1984",DATUM[...]) >>
 ```
 
 This is GDAL's shape, copied. Read on for why that matters more than the spec
@@ -75,36 +75,74 @@ is the bottom-left of the `BBox`. `frameCorners` returns a NAMED record rather
 than an array, because two plausible orderings and a bare four-element array is
 how a map ends up mirrored.
 
-**`GCS` is the PROJECTED system, not `/GEOGCS` with EPSG 4326.** The map is
-drawn in Web Mercator, which is linear in projected metres and *not* linear in
-latitude. Declaring a geographic CS makes the four-corner registration an affine
-fit against latitude, which bows in the middle of the sheet: negligible at
-1:6,000, worth millimetres of paper at 1:100,000. Declaring EPSG:3857 lets the
-reader do the affine fit in the space the map was actually drawn in, where it is
-exact.
+**`GCS` is GEOGCS with EPSG 4326, even though the map is drawn in EPSG:3857.**
+This is the wrong answer on paper and the only one that works — section 2a.
 
 ---
 
 ## 2a. GDAL reading it is not enough
 
-The first version of this passed every check in section 1 and **crashed Acrobat
-Pro**: the measuring tool took the application down, and the geospatial tool
-reported no coordinates at all. GDAL read the same file without a murmur.
+This took three versions, because GDAL is a tolerant reader and it was the only
+one asked. Each version satisfied every check in section 1.
 
-Three differences from GDAL's own output, found by generating a reference
-GeoPDF with `gdal_translate -of PDF` and dumping its objects:
+**v1 crashed Acrobat Pro.** The measuring tool took the application down and the
+geospatial tool reported nothing. Generating a reference with
+`gdal_translate -of PDF` and dumping its objects showed four differences:
 
-| | first version | GDAL, and now this |
+| | v1 | GDAL, and now this |
 |---|---|---|
-| `/GCS` | `/EPSG 3857` alone | `/EPSG` **and** `/WKT`, ESRI dialect |
+| `/GCS` | `/EPSG` alone | `/EPSG` **and** `/WKT`, ESRI dialect |
 | `/Bounds`, `/LPTS` | `[0 0 0 1 1 1 1 0]` | `[0 1 0 0 1 0 1 1]` |
 | Viewport, Measure, GCS | inline dictionaries | indirect objects |
 | whole file | pdf-lib object streams | plain objects, xref table |
 
-The `/WKT` is the one that matters most. Acrobat carries no EPSG database, so a
-coordinate system given only as a number is a coordinate system it cannot build
-a transform for. Everything else is legal PDF that GDAL accepts and Acrobat was
-never asked to accept by anyone else.
+The `/WKT` is the one that mattered. Acrobat carries no EPSG database, so a
+coordinate system given only as a number is one it cannot build a transform for.
+
+**v2 stopped the crash and still showed no coordinates**, with the dictionaries
+now identical in shape and value to GDAL's. The answer only came from driving
+Acrobat directly: with the Geospatial Location tool active, right-click offers
+*Mark Location*, and the marker it drops carries the coordinate as text. On v2
+it read:
+
+```
+Lat: 0.00000 Long: 0.00000
+```
+
+And so did GDAL's own GeoPDF of the same map. **This Acrobat cannot resolve
+EPSG:3857 at all** — it parses the dictionary, recognises the document as
+geospatial, and computes zero. The projected coordinate system was never
+encodable here, by us or by GDAL.
+
+**v3 declares GEOGCS / EPSG 4326.** `GPTS` are already latitude and longitude,
+so no value changes — only the declared system. Acrobat then reports live
+coordinates, verified against the declared corners on a 1:6,000 Letter sheet:
+
+| | declared | Acrobat |
+|---|---|---|
+| west edge | −111.763639 | −111.7636 |
+| east edge | −111.751113 | −111.7512 |
+| south edge | 34.936583 | 34.9366 |
+| centre | −111.757376 | −111.7574 |
+
+### What the geographic CS costs
+
+A lat/lon affine is not linear in Mercator y, so the registration bows slightly
+between the north and south edges. Worst case mid-sheet, at this latitude:
+
+| sheet | 1:6,000 | 1:24,000 | 1:100,000 |
+|---|---|---|---|
+| Letter | 0.03 m | 0.44 m | 7.7 m |
+| Tabloid | 0.07 m | 1.20 m | 20.8 m |
+| Arch E | 0.68 m | 10.9 m | 189.8 m |
+
+As a fraction of the sheet that is under 0.1 mm of paper everywhere except the
+largest sheets at the smallest scales, where it reaches about 2 mm. If that ever
+matters, the fix is more `GPTS`/`LPTS` points rather than a different CS: the
+spec allows a lattice, and interpolating between rows removes the bow.
+
+GDAL still reads the sheet with the geographic CS — WGS 84, geotransform
+present, neatline present — so CloudTAK's import check is unaffected.
 
 The rule this leaves behind: **where the spec allows latitude, match GDAL's
 output rather than the prose.** Acrobat is the stricter reader, GDAL's writer is
@@ -210,7 +248,6 @@ this; `gdalinfo --formats | grep PDF` should report `PDF -raster,vector- (rw+vs)
   downsample path, which sheets from this service do not trigger — a 1:6,000
   Letter sheet computes zoom 18, under the zoom-22 clamp — but it looks like a
   latent bug.
-- Confirm the import end to end in ATAK and TAK Aware, not just CloudTAK, and
-  re-check Acrobat Pro's geospatial and measuring tools after the section 2a
-  fix.
+- Confirm the import end to end in ATAK and TAK Aware. Acrobat Pro is settled
+  (section 2a); CloudTAK is settled by section 1; the two TAK clients are not.
 - No plugin UI for the toggle yet; the request field is the only control.

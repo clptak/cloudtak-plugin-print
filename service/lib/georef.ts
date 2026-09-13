@@ -14,11 +14,9 @@
  * MBTiles. A sheet carrying this dictionary imports as a map overlay with no
  * change on the CloudTAK side.
  *
- * The registration is declared in the PROJECTED coordinate system the map was
- * drawn in (EPSG:3857), not in plain latitude and longitude. A Web Mercator
- * sheet is linear in projected metres and is NOT linear in latitude, so a
- * four-corner fit against lat/lon bows in the middle -- negligible at 1:6,000
- * and worth millimetres of paper at 1:100,000.
+ * The registration is declared in WGS 84 lat/lon rather than in the projected
+ * system the map is drawn in. That is not the theoretically better choice --
+ * see WGS84_WKT below for what it costs and why Acrobat leaves no alternative.
  */
 
 import { PDFDocument, PDFName, PDFNumber, PDFString } from 'pdf-lib';
@@ -123,20 +121,38 @@ export function frameBox(opts: GeoreferenceOptions): [number, number, number, nu
 const LPTS = [0, 1, 0, 0, 1, 0, 1, 1];
 
 /**
- * EPSG:3857 in the ESRI WKT dialect, exactly as GDAL's PDF writer emits it.
+ * WGS 84 in the ESRI WKT dialect.
  *
- * `/EPSG 3857` on its own is legal and GDAL reads it happily. Acrobat does not:
- * it carries no EPSG database, so with no WKT its geospatial tool reports no
- * coordinates and its measuring tool takes the application down. The WKT is
- * what Acrobat actually parses, which makes it not optional in practice.
+ * Two things here were each established by testing rather than by reading, and
+ * both cost a release to find out.
+ *
+ * The WKT is not optional. `/EPSG 4326` on its own is legal and GDAL reads it
+ * happily, but Acrobat carries no EPSG database: with no WKT its geospatial
+ * tool reports nothing and its measuring tool takes the application down.
+ *
+ * And this is GEOGCS, not the PROJCS for EPSG:3857 that the map is actually
+ * drawn in. Declaring the projected system is the better answer on paper -- Web
+ * Mercator is linear in projected metres, so the four-corner registration would
+ * be exact rather than bowed -- and GDAL both writes and reads it that way. But
+ * Acrobat resolves it to nothing: a sheet declaring PROJCS 3857 reads out as
+ * Lat 0.00000 Long 0.00000, and so does GDAL's own GeoPDF written the same way.
+ * Acrobat is the reader that cannot be worked around, so GEOGCS it is.
+ *
+ * What that costs is a small bow, because a lat/lon affine is not linear in
+ * Mercator y. Measured at this latitude, worst case mid-sheet:
+ *
+ *   Letter   1:6,000   0.03m    1:24,000   0.44m    1:100,000    7.7m
+ *   Tabloid  1:6,000   0.07m    1:24,000   1.20m    1:100,000   20.8m
+ *   Arch E   1:6,000   0.68m    1:24,000  10.90m    1:100,000  189.8m
+ *
+ * As a fraction of the sheet that is under 0.1mm of paper everywhere except the
+ * largest sheets at the smallest scales, where it reaches about 2mm. If that
+ * ever matters, the fix is more GPTS/LPTS points rather than a different CS:
+ * the spec allows a lattice, and interpolating between rows removes the bow.
  */
-const WEB_MERCATOR_WKT = 'PROJCS["WGS_1984_Web_Mercator_Auxiliary_Sphere",'
-    + 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
-    + 'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],'
-    + 'PROJECTION["Mercator_Auxiliary_Sphere"],PARAMETER["False_Easting",0.0],'
-    + 'PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],'
-    + 'PARAMETER["Standard_Parallel_1",0.0],PARAMETER["Auxiliary_Sphere_Type",0.0],'
-    + 'UNIT["Meter",1.0]]';
+const WGS84_WKT = 'GEOGCS["GCS_WGS_1984",'
+    + 'DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+    + 'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
 
 /**
  * Add the geospatial viewport to a rendered sheet.
@@ -165,9 +181,9 @@ export async function georeference(pdf: Buffer, opts: GeoreferenceOptions): Prom
     // Registered as indirect objects rather than inlined, because that is the
     // shape GDAL writes and Acrobat accepts. Inline dictionaries are legal PDF.
     const gcs = ctx.register(ctx.obj({
-        Type: PDFName.of('PROJCS'),
-        EPSG: number(3857),
-        WKT: PDFString.of(WEB_MERCATOR_WKT),
+        Type: PDFName.of('GEOGCS'),
+        EPSG: number(4326),
+        WKT: PDFString.of(WGS84_WKT),
     }));
 
     const measure = ctx.register(ctx.obj({

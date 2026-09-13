@@ -178,16 +178,23 @@ test('a sheet outside the Mercator domain is refused rather than written wrong',
     );
 });
 
-test('the coordinate system carries a WKT, not only an EPSG code', async () => {
-    // Acrobat has no EPSG database. With `/EPSG 3857` alone its geospatial tool
-    // reports no coordinates and its measuring tool crashes the application,
-    // while GDAL reads the same file without complaint -- so nothing but an
-    // explicit check here catches a regression.
+test('the coordinate system is geographic, with a WKT and not only an EPSG code', async () => {
+    // Both halves of this were established in Acrobat, not from the spec, and
+    // both look wrong to a reader who has not been burned by them.
+    //
+    // The WKT: Acrobat has no EPSG database, so with a bare `/EPSG` its
+    // geospatial tool reports nothing and its measuring tool crashes.
+    //
+    // GEOGCS: the map is drawn in EPSG:3857 and declaring that is the more
+    // accurate encoding, but Acrobat resolves a PROJCS sheet to Lat 0.00000
+    // Long 0.00000 -- including GDAL's own. Anyone "fixing" this back to the
+    // projected system breaks Acrobat again, silently, since GDAL accepts both.
     const { gcs } = await viewportOf(await georeference(await blank(), OPTS));
 
-    assert.equal(gcs.lookup(PDFName.of('EPSG'), PDFNumber).asNumber(), 3857);
+    assert.equal(gcs.get(PDFName.of('Type')), PDFName.of('GEOGCS'));
+    assert.equal(gcs.lookup(PDFName.of('EPSG'), PDFNumber).asNumber(), 4326);
 
     const wkt = gcs.lookup(PDFName.of('WKT'), PDFString).asString();
-    assert.match(wkt, /^PROJCS\["WGS_1984_Web_Mercator_Auxiliary_Sphere"/);
-    assert.match(wkt, /PROJECTION\["Mercator_Auxiliary_Sphere"\]/);
+    assert.match(wkt, /^GEOGCS\["GCS_WGS_1984"/);
+    assert.ok(!wkt.includes('PROJCS'), 'a projected CS reads out as zero in Acrobat');
 });
