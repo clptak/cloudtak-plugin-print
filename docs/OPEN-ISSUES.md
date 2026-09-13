@@ -151,6 +151,20 @@ What this touches, none of it hard on its own:
 - The north diagram already carries grid north, so it stays correct; its arrow
   would just point off-vertical, which is the point.
 
-Decide before building: does the whole sheet rotate, or only when the grid is
-on? A rotated sheet with the grid off has no visible justification for being
-rotated.
+**Decided: rotate only when the UTM grid is on.** A rotated sheet with the grid
+off has nothing visible to justify being rotated -- it just prints north wrong.
+
+That makes the grid toggle change the sheet's geometry, not only its decoration,
+and two things follow from it:
+
+- The box on the map has to rotate the moment the toggle moves, or what you drag
+  stops being what you get. The toggle stops being a decoration in the panel and
+  becomes part of the same interaction as the box.
+- The ground footprint is the same rectangle either way -- rotating a rectangle
+  does not change its area or its dimensions -- so `footprint()` and the
+  readouts are unaffected. What changes is which ground falls inside it, which
+  is exactly what someone toggling the grid will be surprised by if the box does
+  not follow.
+
+Worth building the box rotation first for that reason: it is the part that makes
+the rest legible while it is being worked on.
