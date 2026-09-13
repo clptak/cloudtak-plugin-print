@@ -169,31 +169,59 @@ the wrong place, which is the one failure mode worth a dedicated test — see
 
 ---
 
-## 4. The neatline and the collar
+## 4. The collar
 
-GDAL rasterizes the **whole page**, not the map frame. It records the viewport
-as a neatline, but CloudTAK's importer does not clip to it — it just runs
-`gdal raster convert`. So an imported sheet arrives with its margins and title
-block georeferenced by extrapolation, sitting over real ground: at 1:6,000 that
-is about 76m on three sides and 175m below the map.
+GDAL rasterizes the **whole page**, not the map frame, and CloudTAK's importer
+does not clip to the neatline -- it runs `gdal raster convert` on what it is
+given. So the sheet's margins and title strip arrive in the overlay,
+georeferenced by extrapolation and lying over real ground: about 300 m on three
+sides at 1:24,000 and 700 m along the bottom.
 
-Nothing about the georeferencing is wrong; the collar is simply included. Two
-ways to deal with it:
+That is a real defect and it looked exactly as bad as it sounds. Two fixes were
+tried and rejected before the right one:
 
-**Accept it.** The overlay has a white border and a title strip along the
-bottom. Usable, and it costs nothing.
+- **Clip to the neatline at import.** Correct, about ten lines, and it fixes
+  USGS quads too -- every one of them has a collar. But it is a patch to
+  CloudTAK, carried across every upstream merge.
+- **Remove the margins and run the map to the paper edge**, with the title block
+  lying on the map. No collar to clip. It also makes an ugly printed map, which
+  is the sheet's primary job, so it lasted one commit.
 
-**Clip at import.** Roughly ten lines in a CloudTAK fork's `translate.ts`: read
-`NEATLINE` from the `gdal raster info` JSON that transform already parses, and
-pass `-projwin` on the convert. Worth doing on its own merits — every USGS 7.5'
-GeoPDF has a collar too, so CloudTAK currently imports those with the legend
-lying across the map.
+**The actual cause was never the margin. It was painting it white.**
 
+A page that declares no background is left unpainted, and prints identically --
+white paper is white whether or not you put white ink on it. Rendered with
+`GDAL_PDF_BANDS=4`, the unpainted area comes through as alpha 0, the MBTiles
+tiles are RGBA, and the collar simply is not there in the overlay. The sheet
+keeps a proper collar on paper and casts none onto the map.
+
+Measured on a 1:24,000 Letter sheet:
+
+| | |
+|---|---|
+| page painted white (before) | alpha 255 over 100% of the page |
+| page unpainted (now) | alpha 0 over 23.5% -- top margin mean alpha 3.0, map centre 255.0 |
+| through to tiles | 62 of 62 RGBA tiles carry transparent pixels |
+
+What still paints in the margin is the ink that was always there: the grid
+labels, the title text, the north diagram. In an overlay those read as thin dark
+marks over the basemap rather than a white slab, and they are the sheet telling
+you which sheet it is.
+
+### The one deployment requirement
+
+`GDAL_PDF_BANDS=4` must be set on CloudTAK's **events** container. The transform
+spreads `...process.env` into every GDAL call, so an environment variable is
+enough -- there is no code change:
+
+```yaml
+    events:
+        environment:
+            - GDAL_PDF_BANDS=4
 ```
-gdal_translate -projwin <minX> <maxY> <maxX> <minY> sheet.pdf clipped.tif
-```
 
-Not done here, because it belongs to CloudTAK rather than to this plugin.
+Without it nothing breaks: GDAL renders RGB, and the collar is white in the
+overlay exactly as it is today. The sheet is unchanged either way.
 
 ---
 

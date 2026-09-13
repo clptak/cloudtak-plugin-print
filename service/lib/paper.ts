@@ -17,8 +17,16 @@ export type Orientation = 'portrait' | 'landscape';
 
 export const PAPER_SIZES = Object.keys(PAPER) as PaperSize[];
 
-/** Default margins in inches. The bottom strip carries the title block. */
-export const MARGINS = { top: 0.5, right: 0.5, bottom: 1.15, left: 0.5 };
+/**
+ * Default margins in inches. The bottom strip carries the title block.
+ *
+ * The bottom was 1.15in, which left a 0.58in strip. That fitted the identity and
+ * one row of fields exactly, and only by clipping the datum off the end of the
+ * row when all three fields were set. The row wraps now, so the strip has to be
+ * tall enough for two: 0.68in against the 0.59in the content actually needs.
+ * The 0.1in comes off the map, which is 60m at 1:24,000.
+ */
+export const MARGINS = { top: 0.5, right: 0.5, bottom: 1.25, left: 0.5 };
 
 /**
  * Space reserved immediately below the map frame for the bottom row of grid

@@ -121,6 +121,22 @@ export function sheetHtml(opts: SheetOptions): string {
 
   * { box-sizing: border-box; }
 
+  /*
+   * The page is NOT painted white. It is left unpainted, which prints exactly
+   * the same -- white paper is white whether or not you put white ink on it --
+   * and makes the margin transparent rather than opaque in the raster.
+   *
+   * That is what lets the sheet keep a proper collar AND import cleanly. GDAL
+   * rasterizes a whole page, and CloudTAK does not clip to the neatline, so a
+   * painted margin arrives in an overlay as a white slab lying over real
+   * ground: 300m of it on three sides at 1:24,000. Unpainted, with the events
+   * task run under GDAL_PDF_BANDS=4, the same margin comes through as alpha 0
+   * and disappears. See docs/GEOREFERENCING.md section 4.
+   *
+   * Anything that genuinely needs a background of its own still declares one --
+   * the QR card below does, because a scanner needs the quiet zone even over
+   * dark imagery.
+   */
   html, body {
     margin: 0;
     padding: 0;
@@ -128,7 +144,7 @@ export function sheetHtml(opts: SheetOptions): string {
     height: ${sheet.height}in;
     font-family: "Liberation Sans", "DejaVu Sans", Arial, Helvetica, sans-serif;
     color: #111;
-    background: #fff;
+    background: transparent;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -242,11 +258,16 @@ export function sheetHtml(opts: SheetOptions): string {
      needs. Ranged left because it now sits below a left-aligned title. */
   /* Label and value on one line rather than stacked: the stacked form cost an
      extra 0.12in of sheet height on every print for no added clarity. */
+  /* Wraps rather than clipping. The scale bar and north diagram take their
+     width first, and a long incident number used to push the datum silently off
+     the end of the strip -- "WGS 84" was being cut in half on a Letter sheet
+     with all three fields set. */
   .fields {
     display: flex;
-    gap: 0.13in;
-    flex: none;
-    white-space: nowrap;
+    flex-wrap: wrap;
+    gap: 0.04in 0.13in;
+    flex: 0 1 auto;
+    min-width: 0;
     margin-top: 0.04in;
     align-items: baseline;
   }
