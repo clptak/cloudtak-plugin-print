@@ -113,3 +113,44 @@ rather than scraping the pool. Not yet attempted.
 
 Workaround until then: zoom the map so the symbols draw at least once before
 printing.
+
+---
+
+## Rotate the sheet to grid north
+
+**Status:** wanted, not started. Raised 2026-09-13.
+
+Sheets print true-north-up, or rather Mercator-north-up, which is the same thing
+at these latitudes to well under a degree. The UTM grid is not parallel to that:
+grid convergence is about 0.4 deg at the eastern edge of zone 12 near Flagstaff,
+and reaches 3 deg at a zone boundary. So the grid lines lean across the sheet,
+the grid labels at the top of the map do not sit above the labels at the bottom,
+and a sheet held square to its own grid is not held square to north.
+
+The wanted behaviour is to rotate the map so the sheet is parallel to the UTM
+grid -- grid north up -- when the UTM grid is on.
+
+What this touches, none of it hard on its own:
+
+- `renderMap` sets `bearing: 0` deliberately. It would take the convergence at
+  the sheet centre instead. Bearing is a map property, so the raster rotates
+  with everything on it.
+- `lib/geo.ts` `zoomForScale` is unaffected: scale is a function of latitude,
+  not of bearing.
+- `lib/grid.ts` `projector` would need the same rotation applied about the frame
+  centre, or the grid drifts off the map beneath it. This is the part to be
+  careful with -- the georeferencing is measured against the printed grid, so an
+  error here shows up as a registration error, not as a cosmetic one.
+- `lib/georef.ts` would no longer be describing an axis-aligned rectangle in
+  EPSG:4326. `GPTS`/`LPTS` take four arbitrary corners, so a rotated quad is
+  expressible, but a reader that fits an affine to it will be fitting a rotation
+  -- worth checking in Acrobat and through the CloudTAK import before trusting
+  it, exactly as section 2a of GEOREFERENCING.md had to.
+- The sheet box drawn on the screen in `plugin/lib/sheetbox.ts` would have to
+  rotate to match, or what you drag stops being what you get.
+- The north diagram already carries grid north, so it stays correct; its arrow
+  would just point off-vertical, which is the point.
+
+Decide before building: does the whole sheet rotate, or only when the grid is
+on? A rotated sheet with the grid off has no visible justification for being
+rotated.

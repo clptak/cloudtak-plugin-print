@@ -150,6 +150,46 @@
                 </div>
 
                 <!--
+                    Nothing reaches a Data Sync unless it is pushed here. Neither
+                    Preview nor Print uploads on its own: a mission keeps
+                    everything ever attached to it, and a sheet that went there
+                    because a button happened to be pressed is somebody else's
+                    problem to sort out later.
+                -->
+                <div
+                    v-if='sendOptions.length > 1'
+                    class='my-2'
+                >
+                    <TablerEnum
+                        v-model='sendLabel'
+                        label='Send to Data Sync'
+                        :options='sendOptions'
+                    />
+                    <div class='d-flex mt-2'>
+                        <TablerButton
+                            class='btn-sm ms-auto'
+                            :disabled='busy || sending || !sendMission'
+                            @click='send'
+                        >
+                            {{ sending ? 'Sending…' : 'Send Preview' }}
+                        </TablerButton>
+                    </div>
+                </div>
+
+                <TablerInlineAlert
+                    v-if='sendError'
+                    severity='danger'
+                    title='Send failed'
+                    :description='sendError.message'
+                />
+
+                <div
+                    v-if='sendNote'
+                    class='subheader my-2'
+                    v-text='sendNote'
+                />
+
+                <!--
                     An overlay the service cannot resolve is dropped silently on its
                     side, which is how a sheet comes back missing the one layer the
                     team needed. Say so before the job is submitted, not after.
@@ -171,7 +211,7 @@
                 <div class='my-3 d-flex'>
                     <TablerButton
                         class='btn-sm'
-                        :disabled='busy'
+                        :disabled='busy || sending'
                         @click='fitToSheet'
                     >
                         Fit Map to Sheet
@@ -180,7 +220,7 @@
                     <div class='ms-auto'>
                         <TablerButton
                             class='btn-sm me-2'
-                            :disabled='busy'
+                            :disabled='busy || sending'
                             @click='run(true)'
                         >
                             Preview
@@ -188,7 +228,7 @@
 
                         <TablerButton
                             class='btn-sm btn-primary'
-                            :disabled='busy'
+                            :disabled='busy || sending'
                             @click='run(false)'
                         >
                             Print
@@ -241,7 +281,8 @@ import { useMapStore } from '../../src/stores/map.ts';
 import { info as fetchInfo, submit, wait, result } from './lib/api.ts';
 import type { PrintInfo, JobStatus, PrintRequest } from './lib/api.ts';
 import { harvest } from './lib/harvest.ts';
-import { missions, inviteQr } from './lib/missions.ts';
+import { missions, inviteQr, attach } from './lib/missions.ts';
+import { sendable } from './lib/datasync.ts';
 import type { MissionOption } from './lib/missions.ts';
 import { SheetBox } from './lib/sheetbox.ts';
 
@@ -302,6 +343,14 @@ const agency = ref('');
 const centre = ref<[number, number]>([0, 0]);
 const missionList = ref<MissionOption[]>([]);
 const missionLabel = ref(NO_MISSION);
+
+// Its own selection, not the invite QR's. Sending a map somewhere and inviting
+// people to join it are different decisions, and the common case is one without
+// the other.
+const sendLabel = ref(NO_MISSION);
+const sending = ref(false);
+const sendError = ref<Error | undefined>();
+const sendNote = ref('');
 const unresolved = ref<string[]>([]);
 const iconWarning = ref('');
 
@@ -346,6 +395,19 @@ const missionOptions = computed(() => {
 const mission = computed(() => {
     if (missionLabel.value === NO_MISSION) return undefined;
     return missionList.value.find((entry) => entry.name === missionLabel.value);
+});
+
+const sendList = computed(() => {
+    return sendable(missionList.value);
+});
+
+const sendOptions = computed(() => {
+    return [NO_MISSION, ...sendList.value.map((entry) => entry.name)];
+});
+
+const sendMission = computed(() => {
+    if (sendLabel.value === NO_MISSION) return undefined;
+    return sendList.value.find((entry) => entry.name === sendLabel.value);
 });
 
 const markOptions = MARK_SIZES.map(([label]) => label);
@@ -474,6 +536,25 @@ function fitToSheet() {
  * printed -- a dump built by a separate path would describe a different render,
  * which is precisely the trap the old console harvester became.
  */
+/**
+ * What the sheet is called.
+ *
+ * A Data Sync keeps everything ever attached to it, so two sheets of the same
+ * area on the same incident must not collide -- hence the timestamp. Minutes,
+ * not seconds: it is there to disambiguate, not to be read.
+ */
+function sheetName(suffix = ''): string {
+    const stem = title.value.trim()
+        ? title.value.replace(/[^\w-]+/g, '-').toLowerCase().replace(/^-+|-+$/g, '')
+        : 'map';
+
+    return `${stem}-${scale.value}${suffix}.pdf`;
+}
+
+function stamp(): string {
+    return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z').slice(0, 14) + 'Z';
+}
+
 async function compose(preview: boolean): Promise<PrintRequest> {
     const captured = await harvest(mapStore.map);
     unresolved.value = captured.unresolved;
@@ -523,6 +604,52 @@ async function compose(preview: boolean): Promise<PrintRequest> {
     };
 }
 
+/**
+ * Render at preview quality and attach the result to a Data Sync.
+ *
+ * Preview quality deliberately. This is for "here is the area, any objections"
+ * before committing to a full render, and it is pulled down over cellular by
+ * whoever is subscribed: a preview is a few hundred kilobytes against several
+ * megabytes for a 1:24,000 sheet. The filename says so, because the one thing
+ * worse than a low-resolution map in a mission is a low-resolution map nobody
+ * knows is low-resolution.
+ */
+async function send() {
+    const target = sendMission.value;
+    if (!target) return;
+
+    sending.value = true;
+    sendError.value = undefined;
+    sendNote.value = '';
+    job.value = undefined;
+
+    try {
+        const submitted = await submit(await compose(true));
+
+        job.value = submitted;
+
+        const finished = await wait(submitted.job, {
+            onUpdate: (update) => {
+                job.value = update;
+            },
+        });
+
+        if (finished.status === 'failed') {
+            throw new Error(finished.error || 'Print job failed');
+        }
+
+        const name = sheetName(`-${stamp()}-preview`);
+
+        await attach(target.guid, await result(submitted.job), name);
+
+        sendNote.value = `Sent ${name} to ${target.name}`;
+    } catch (err) {
+        sendError.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+        sending.value = false;
+    }
+}
+
 async function run(preview: boolean) {
     busy.value = true;
     jobError.value = undefined;
@@ -544,10 +671,7 @@ async function run(preview: boolean) {
         }
 
         const blob = await result(submitted.job);
-        const stem = title.value.trim()
-            ? title.value.replace(/[^\w-]+/g, '-').toLowerCase().replace(/^-+|-+$/g, '')
-            : 'map';
-        const name = `${stem}-${scale.value}.pdf`;
+        const name = sheetName();
 
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement('a');

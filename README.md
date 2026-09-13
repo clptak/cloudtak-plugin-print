@@ -194,6 +194,28 @@ npm run check    # tsc --noEmit
 npm test         # node:test via tsx
 ```
 
+### Checking the plugin
+
+**Neither `vue-tsc` nor `eslint` follows the symlink.** Run either one in
+CloudTAK with `plugins/print` symlinked and you get silence — not a pass, no
+files. Both were verified to miss a deliberate type error in `plugin/lib/`.
+
+Copy the plugin to a real directory under `plugins/` and check that:
+
+```sh
+cd ~/CloudTAK/api/web
+cp -R ~/dev/cloudtak-plugin-print/plugin plugins/print-check
+npx vue-tsc --noEmit 2>&1 | grep print-check     # nothing = clean
+npx eslint --config eslint.config.js ./plugins/print-check
+rm -rf plugins/print-check
+```
+
+The pure parts of the plugin — anything that does not import CloudTAK — are
+covered properly by `service/test/parity/`, which is why `lib/datasync.ts`,
+`lib/geometry.ts`, `lib/iconids.ts`, `lib/pixels.ts` and `lib/printlayers.ts`
+hold no CloudTAK imports. Keep it that way: it is the only part of the plugin
+under real test.
+
 ## Endpoints
 
 | Method | Path | Auth | Purpose |

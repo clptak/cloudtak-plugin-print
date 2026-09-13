@@ -1,5 +1,6 @@
 import Subscription from '../../../src/base/subscription.ts';
 import { serverUrl, getRuntimeToken } from '../../../src/std.ts';
+import { uploadUrl } from './datasync.ts';
 
 /**
  * Data Syncs (Missions) and their invite QR codes.
@@ -35,6 +36,41 @@ export async function missions(): Promise<MissionOption[]> {
             return { guid: entry.guid, name: entry.name };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Attach a file to a Data Sync.
+ *
+ * POSTs the bytes raw, exactly as CloudTAK's own Upload component does: the
+ * route streams the request body straight to TAK Server and reads
+ * `content-length` off it, so this must not be multipart and must not be a
+ * stream. Content-Type comes from the Blob, again as the browser's own uploader
+ * leaves it.
+ *
+ * No mission token is sent. The route falls back to the caller's own
+ * subscription when the header is absent, and every mission in this list is one
+ * the user is subscribed to with write access -- `missions()` filters on
+ * MISSION_SUBSCRIBER, which excludes read-only subscribers.
+ */
+export async function attach(guid: string, file: Blob, name: string): Promise<void> {
+    const token = await getRuntimeToken();
+
+    const res = await fetch(uploadUrl(String(serverUrl), guid, name), {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: file,
+    });
+
+    if (!res.ok) {
+        const detail = await res.text().catch(() => {
+            return '';
+        });
+
+        throw new Error(
+            `The Data Sync refused the upload (${res.status})`
+            + (detail ? `: ${detail.slice(0, 200)}` : ''),
+        );
+    }
 }
 
 /** The invite QR for one Data Sync, as SVG markup. */

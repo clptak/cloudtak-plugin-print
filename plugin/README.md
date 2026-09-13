@@ -125,3 +125,26 @@ curl -sS "http://127.0.0.1:5010/print-api/jobs/<id>/result?token=$TOKEN" -o shee
 
 `warnings` on the job is the thing to read: it names any source that was dropped and
 why. The plugin surfaces the same field in the panel.
+
+
+## Sending a map to a Data Sync
+
+`Send Preview` renders at preview quality and attaches the result to the
+selected Data Sync, via `POST /api/marti/missions/{guid}/upload?name=...` —
+CloudTAK's own route, which uploads to TAK Server and attaches to the mission in
+one call. The bytes go up raw, exactly as CloudTAK's own Upload component sends
+them; no mission token is needed, because that route falls back to the caller's
+own subscription and `missions()` only ever lists subscriptions with write
+access.
+
+Preview quality on purpose: this is for agreeing an area before committing to a
+full render, and whoever is subscribed pulls it down over cellular. A preview is
+a few hundred kilobytes against several megabytes for a 1:24,000 sheet. The
+filename says `-preview` for the same reason.
+
+Neither Preview nor Print uploads anything on its own. A Data Sync keeps
+everything ever attached to it.
+
+**Management Data Syncs are not offered.** `lib/datasync.ts` drops any whose
+name contains `MGMT`, case-insensitive. A sync spelled `Management` does not
+match — see `service/test/parity/missions.test.ts`, which pins that.
