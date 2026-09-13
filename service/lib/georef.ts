@@ -59,8 +59,19 @@ export function fromMercator(x: number, y: number): [number, number] {
     ];
 }
 
+export type Corners = {
+    nw: [number, number];
+    sw: [number, number];
+    se: [number, number];
+    ne: [number, number];
+};
+
 /**
- * Corners of the map frame as [lon, lat], counter-clockwise from the south-west.
+ * Corners of the map frame as [lon, lat].
+ *
+ * Named rather than ordered on purpose: the write order below is GDAL's, the
+ * rest of this codebase reads south-west first, and a bare array of four points
+ * is how those two quietly become the same mistake.
  *
  * A paper inch is `scale` inches on the ground, but the sheet is drawn in Web
  * Mercator, whose metre is inflated by 1/cos(latitude) -- about 22% at this
@@ -68,21 +79,21 @@ export function fromMercator(x: number, y: number): [number, number] {
  * ground metres, and it is the projected span that has to be declared.
  *
  * This is the same relation `zoomForScale` in lib/geo.ts uses to pick the render
- * zoom, which is why the two agree; test/parity holds them to it.
+ * zoom, which is why the two agree; the tests hold them to it.
  */
-export function frameCorners(opts: GeoreferenceOptions): Array<[number, number]> {
+export function frameCorners(opts: GeoreferenceOptions): Corners {
     const [cx, cy] = toMercator(opts.center[0], opts.center[1]);
     const inflation = 1 / Math.cos(opts.center[1] * Math.PI / 180);
 
     const halfWidth = (opts.frame.width * opts.scale * M_PER_INCH * inflation) / 2;
     const halfHeight = (opts.frame.height * opts.scale * M_PER_INCH * inflation) / 2;
 
-    return [
-        fromMercator(cx - halfWidth, cy - halfHeight), // SW
-        fromMercator(cx - halfWidth, cy + halfHeight), // NW
-        fromMercator(cx + halfWidth, cy + halfHeight), // NE
-        fromMercator(cx + halfWidth, cy - halfHeight), // SE
-    ];
+    return {
+        nw: fromMercator(cx - halfWidth, cy + halfHeight),
+        sw: fromMercator(cx - halfWidth, cy - halfHeight),
+        se: fromMercator(cx + halfWidth, cy - halfHeight),
+        ne: fromMercator(cx + halfWidth, cy + halfHeight),
+    };
 }
 
 /**
@@ -100,11 +111,32 @@ export function frameBox(opts: GeoreferenceOptions): [number, number, number, nu
 }
 
 /**
- * The four corners in the viewport's own unit space, and the order everything
- * else follows: south-west, north-west, north-east, south-east. In PDF user
- * space y increases upward, so (0,0) is the bottom-left of the BBox.
+ * The four corners in the viewport's own unit space: (0,1) (0,0) (1,0) (1,1) --
+ * north-west, south-west, south-east, north-east. y increases upward, so (0,0)
+ * is the bottom-left of the BBox.
+ *
+ * This is the order GDAL's own PDF writer uses, and it is copied deliberately.
+ * A different but self-consistent order is legal and GDAL reads it back
+ * correctly; the first version of this file used one, and Acrobat did not
+ * agree. Where the spec allows latitude, follow the reference implementation.
  */
-const LPTS = [0, 0, 0, 1, 1, 1, 1, 0];
+const LPTS = [0, 1, 0, 0, 1, 0, 1, 1];
+
+/**
+ * EPSG:3857 in the ESRI WKT dialect, exactly as GDAL's PDF writer emits it.
+ *
+ * `/EPSG 3857` on its own is legal and GDAL reads it happily. Acrobat does not:
+ * it carries no EPSG database, so with no WKT its geospatial tool reports no
+ * coordinates and its measuring tool takes the application down. The WKT is
+ * what Acrobat actually parses, which makes it not optional in practice.
+ */
+const WEB_MERCATOR_WKT = 'PROJCS["WGS_1984_Web_Mercator_Auxiliary_Sphere",'
+    + 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+    + 'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],'
+    + 'PROJECTION["Mercator_Auxiliary_Sphere"],PARAMETER["False_Easting",0.0],'
+    + 'PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",0.0],'
+    + 'PARAMETER["Standard_Parallel_1",0.0],PARAMETER["Auxiliary_Sphere_Type",0.0],'
+    + 'UNIT["Meter",1.0]]';
 
 /**
  * Add the geospatial viewport to a rendered sheet.
@@ -128,31 +160,45 @@ export async function georeference(pdf: Buffer, opts: GeoreferenceOptions): Prom
     const ctx = doc.context;
 
     const number = (n: number) => PDFNumber.of(n);
-    const corners = frameCorners(opts);
+    const c = frameCorners(opts);
 
-    const measure = ctx.obj({
+    // Registered as indirect objects rather than inlined, because that is the
+    // shape GDAL writes and Acrobat accepts. Inline dictionaries are legal PDF.
+    const gcs = ctx.register(ctx.obj({
+        Type: PDFName.of('PROJCS'),
+        EPSG: number(3857),
+        WKT: PDFString.of(WEB_MERCATOR_WKT),
+    }));
+
+    const measure = ctx.register(ctx.obj({
         Type: PDFName.of('Measure'),
         Subtype: PDFName.of('GEO'),
         /** The viewport's boundary in its own unit space. */
         Bounds: ctx.obj(LPTS.map(number)),
-        /** Pairwise (latitude, longitude) -- note the order, it is not lon/lat. */
-        GPTS: ctx.obj(corners.flatMap(([lon, lat]) => [number(lat), number(lon)])),
-        /** The same four points in unit space, in the same order. */
+        /**
+         * Pairwise (LATITUDE, longitude) -- the reverse of every other
+         * coordinate here -- in the same order as LPTS: NW, SW, SE, NE.
+         */
+        GPTS: ctx.obj([c.nw, c.sw, c.se, c.ne].flatMap(([lon, lat]) => [number(lat), number(lon)])),
         LPTS: ctx.obj(LPTS.map(number)),
-        GCS: ctx.obj({
-            Type: PDFName.of('PROJCS'),
-            EPSG: number(3857),
-        }),
-    });
+        GCS: gcs,
+    }));
 
-    const viewport = ctx.obj({
+    const viewport = ctx.register(ctx.obj({
         Type: PDFName.of('Viewport'),
         BBox: ctx.obj(frameBox(opts).map(number)),
         Name: PDFString.of('Map frame'),
         Measure: measure,
-    });
+    }));
 
     page.node.set(PDFName.of('VP'), ctx.obj([viewport]));
 
-    return Buffer.from(await doc.save());
+    /*
+     * Saved as plain objects with a classic cross-reference table, not the
+     * compressed object streams pdf-lib defaults to. Chromium writes the sheet
+     * that way and GDAL writes its own GeoPDFs that way; re-serialising into
+     * object streams changes the shape of the whole file for the sake of about
+     * a kilobyte, and the reader this has to satisfy is the fussy one.
+     */
+    return Buffer.from(await doc.save({ useObjectStreams: false }));
 }

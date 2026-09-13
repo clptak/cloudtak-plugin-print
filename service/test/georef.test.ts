@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFArray, PDFDict, PDFNumber, PDFRef, PDFString } from 'pdf-lib';
 import { georeference, frameCorners, frameBox, toMercator, fromMercator } from '../lib/georef.js';
 import { zoomForScale } from '../lib/geo.js';
 import { sheet, MARGINS } from '../lib/paper.js';
@@ -28,7 +28,7 @@ test('mercator conversion round-trips', () => {
 });
 
 test('the frame corners are square and centred on the requested point', () => {
-    const [sw, nw, ne, se] = frameCorners(OPTS);
+    const { sw, nw, ne, se } = frameCorners(OPTS);
 
     // Order is SW, NW, NE, SE — everything downstream depends on it.
     assert.equal(sw[0], nw[0]);
@@ -49,7 +49,7 @@ test('the frame corners are square and centred on the requested point', () => {
 
 test('the frame spans exactly the ground distance the scale promises', () => {
     // 7.5in at 1:24,000 is 4572m across, whatever the projection does in between.
-    const [sw, , ne] = frameCorners(OPTS);
+    const { sw, ne } = frameCorners(OPTS);
     const metresPerDegreeLon = (40075016.686 / 360) * Math.cos(OPTS.center[1] * Math.PI / 180);
     const ground = (ne[0] - sw[0]) * metresPerDegreeLon;
 
@@ -69,7 +69,7 @@ test('the corners agree with the zoom the map was actually rendered at', () => {
     const mercatorPerPx = (2 * Math.PI * 6378137) / worldPx;
     const expected = OPTS.frame.width * layoutDpi * mercatorPerPx;
 
-    const [sw, , ne] = frameCorners(OPTS);
+    const { sw, ne } = frameCorners(OPTS);
     const span = toMercator(ne[0], ne[1])[0] - toMercator(sw[0], sw[1])[0];
 
     assert.ok(Math.abs(span - expected) / expected < 1e-6, `${span} vs ${expected}`);
@@ -95,30 +95,61 @@ async function blank(): Promise<Buffer> {
     return Buffer.from(await doc.save());
 }
 
-test('the sheet comes back carrying a GEO viewport over the frame', async () => {
-    const tagged = await georeference(await blank(), OPTS);
-    const page = (await PDFDocument.load(tagged)).getPage(0);
+/**
+ * The viewport, its Measure dictionary and its GCS, resolved through the
+ * document. Each `lookup` doubles as the assertion that the entry is an
+ * indirect reference -- the shape GDAL writes and Acrobat accepts.
+ */
+async function viewportOf(pdf: Buffer) {
+    const doc = await PDFDocument.load(pdf);
+    const page = doc.getPage(0);
+    const ctx = page.node.context;
 
-    const vp = page.node.get(PDFName.of('VP')) as PDFArray;
+    const vp = page.node.lookup(PDFName.of('VP'), PDFArray);
     assert.equal(vp.size(), 1);
 
-    const viewport = vp.get(0) as PDFDict;
-    const measure = viewport.get(PDFName.of('Measure')) as PDFDict;
+    assert.ok(vp.get(0) instanceof PDFRef, 'the viewport is an indirect object');
+    const viewport = ctx.lookup(vp.get(0), PDFDict);
+
+    assert.ok(viewport.get(PDFName.of('Measure')) instanceof PDFRef, 'Measure is indirect');
+    const measure = viewport.lookup(PDFName.of('Measure'), PDFDict);
+
+    assert.ok(measure.get(PDFName.of('GCS')) instanceof PDFRef, 'GCS is indirect');
+
+    return { viewport, measure, gcs: measure.lookup(PDFName.of('GCS'), PDFDict) };
+}
+
+test('the sheet comes back carrying a GEO viewport over the frame', async () => {
+    const { viewport, measure } = await viewportOf(await georeference(await blank(), OPTS));
     assert.equal(measure.get(PDFName.of('Subtype')), PDFName.of('GEO'));
 
-    const gcs = measure.get(PDFName.of('GCS')) as PDFDict;
-    assert.equal((gcs.get(PDFName.of('EPSG')) as PDFNumber).asNumber(), 3857);
-
-    const gpts = measure.get(PDFName.of('GPTS')) as PDFArray;
+    const gpts = measure.lookup(PDFName.of('GPTS'), PDFArray);
     assert.equal(gpts.size(), 8);
 
     // GPTS is (latitude, longitude) pairwise, which is the opposite of every
     // other coordinate in this codebase and the easiest thing to get backwards.
-    const corners = frameCorners(OPTS);
-    assert.ok(Math.abs((gpts.get(0) as PDFNumber).asNumber() - corners[0][1]) < 1e-9);
-    assert.ok(Math.abs((gpts.get(1) as PDFNumber).asNumber() - corners[0][0]) < 1e-9);
+    // The order is GDAL's: NW, SW, SE, NE, matching LPTS point for point.
+    const c = frameCorners(OPTS);
+    const at = (i: number) => (gpts.get(i) as PDFNumber).asNumber();
 
-    const bbox = viewport.get(PDFName.of('BBox')) as PDFArray;
+    for (const [i, corner] of [c.nw, c.sw, c.se, c.ne].entries()) {
+        assert.ok(Math.abs(at(i * 2) - corner[1]) < 1e-9, `GPTS ${i} latitude`);
+        assert.ok(Math.abs(at(i * 2 + 1) - corner[0]) < 1e-9, `GPTS ${i} longitude`);
+    }
+
+    // Each GPTS point must sit at the LPTS point of the same index, or the
+    // registration is a rotation or a reflection of the map.
+    const lpts = measure.lookup(PDFName.of('LPTS'), PDFArray);
+    const unit = [0, 1, 2, 3].map((i) => {
+        return [(lpts.get(i * 2) as PDFNumber).asNumber(), (lpts.get(i * 2 + 1) as PDFNumber).asNumber()];
+    });
+
+    assert.deepEqual(unit, [[0, 1], [0, 0], [1, 0], [1, 1]]);
+    // x=0 is west, y=1 is north: check one of each against the corners above.
+    assert.ok(at(0) > at(2), 'first GPTS point should be the northern one');
+    assert.ok(at(1) < at(5), 'first GPTS point should be the western one');
+
+    const bbox = viewport.lookup(PDFName.of('BBox'), PDFArray);
     assert.deepEqual(
         [0, 1, 2, 3].map(i => (bbox.get(i) as PDFNumber).asNumber()),
         frameBox(OPTS),
@@ -145,4 +176,18 @@ test('a sheet outside the Mercator domain is refused rather than written wrong',
         () => georeference(input, { ...OPTS, center: [Number.NaN, 34.9] }),
         /not a finite coordinate/,
     );
+});
+
+test('the coordinate system carries a WKT, not only an EPSG code', async () => {
+    // Acrobat has no EPSG database. With `/EPSG 3857` alone its geospatial tool
+    // reports no coordinates and its measuring tool crashes the application,
+    // while GDAL reads the same file without complaint -- so nothing but an
+    // explicit check here catches a regression.
+    const { gcs } = await viewportOf(await georeference(await blank(), OPTS));
+
+    assert.equal(gcs.lookup(PDFName.of('EPSG'), PDFNumber).asNumber(), 3857);
+
+    const wkt = gcs.lookup(PDFName.of('WKT'), PDFString).asString();
+    assert.match(wkt, /^PROJCS\["WGS_1984_Web_Mercator_Auxiliary_Sphere"/);
+    assert.match(wkt, /PROJECTION\["Mercator_Auxiliary_Sphere"\]/);
 });
