@@ -23,7 +23,7 @@ One repo because the job-request contract spans both halves: every change to it 
 
 ## Status
 
-Working end to end: pick a scale and sheet size in the panel, drag the box on the map, print. The sheet carries your live basemap and overlays, a zone-aware UTM grid with edge labels, a dual metric/imperial scale bar, a three-north diagram with declination from the offline World Magnetic Model, a title block, and optionally a Data Sync invite QR.
+Working end to end: pick a scale and sheet size in the panel, drag the box on the map, print. The sheet carries your live basemap and overlays, a zone-aware UTM grid with edge labels, a dual metric/imperial scale bar, a three-north diagram with declination from the offline World Magnetic Model, a title block, and optionally a Data Sync invite QR. A **GeoPDF** toggle, on by default, georeferences the sheet.
 
 Printed sheets measure correctly against a 1:24,000 UTM tool, and are georeferenced — a sheet imports back into CloudTAK, ATAK or TAK Aware as a map overlay. See `docs/GEOREFERENCING.md`.
 

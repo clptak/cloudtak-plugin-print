@@ -113,6 +113,16 @@
                 </div>
 
                 <div class='my-2'>
+                    <TablerToggle
+                        v-model='geopdf'
+                        label='GeoPDF'
+                    />
+                    <div class='subheader mt-1'>
+                        Georeferenced, so the sheet imports back into CloudTAK, ATAK or TAK Aware as an overlay. Prints the same either way.
+                    </div>
+                </div>
+
+                <div class='my-2'>
                     <TablerEnum
                         v-model='markLabel'
                         label='Marker &amp; Label Size'
@@ -278,6 +288,12 @@ const markLabel = ref('Normal — 100%');
 
 // On by default: the grid is the reason most of these sheets get printed.
 const grid = ref(true);
+
+// On by default too. It costs nothing to print -- the georeferencing is invisible
+// to a printer -- and a sheet that cannot be put back on a map is a dead end.
+// The toggle exists because it is not free everywhere: it adds a viewport
+// dictionary some third-party PDF tooling has opinions about.
+const geopdf = ref(true);
 
 const title = ref('');
 const incident = ref('');
@@ -499,6 +515,7 @@ async function compose(preview: boolean): Promise<PrintRequest> {
         style: captured.style,
         images: captured.images,
         qr,
+        georeference: geopdf.value,
         furniture: {
             grid: grid.value ? 'utm' : 'none',
             branding: agency.value || undefined,

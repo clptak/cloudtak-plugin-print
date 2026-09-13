@@ -81,6 +81,13 @@ export type PrintRequest = {
     style?: Record<string, unknown>;
     images?: unknown[];
     qr?: { svg: string; label?: string };
+    /**
+     * Embed the geospatial viewport, making the sheet a GeoPDF that CloudTAK,
+     * ATAK and TAK Aware can import back as an overlay. Defaults to true
+     * service-side; sent explicitly so the panel's toggle is the only thing
+     * deciding it.
+     */
+    georeference?: boolean;
     furniture?: {
         grid?: 'utm' | 'none';
         legend?: boolean;

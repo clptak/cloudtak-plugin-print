@@ -214,10 +214,15 @@ the grid and the declared viewport all describe one rectangle.
 
 ## 6. Turning it off
 
-`georeference: false` in the print request. On by default: it costs nothing to
-print, and a sheet that cannot be put back on a map is a dead end. If the step
-fails the job still returns the sheet and adds a warning rather than throwing
-away an expensive render.
+A **GeoPDF** toggle in the print panel, on by default, sending `georeference`
+in the request. On by default because it costs nothing to print -- the viewport
+is invisible to a printer -- and a sheet that cannot be put back on a map is a
+dead end. The toggle exists because it is not free everywhere: it adds a
+dictionary that third-party PDF tooling has opinions about, as section 2a is
+three rounds of evidence for.
+
+If the step fails the job still returns the sheet and adds a warning, rather
+than throwing away an expensive render over the last kilobyte of it.
 
 ---
 
@@ -250,4 +255,5 @@ this; `gdalinfo --formats | grep PDF` should report `PDF -raster,vector- (rw+vs)
   latent bug.
 - Confirm the import end to end in ATAK and TAK Aware. Acrobat Pro is settled
   (section 2a); CloudTAK is settled by section 1; the two TAK clients are not.
-- No plugin UI for the toggle yet; the request field is the only control.
+- The toggle is not remembered between sessions, unlike marker size. It defaults
+  to on every time, which is the wanted behaviour until somebody says otherwise.
