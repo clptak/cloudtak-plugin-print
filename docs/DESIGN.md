@@ -327,7 +327,11 @@ Everything currently visible on the user's map, with a checklist in the print pa
 
 ### 8.6 Deferred to v2
 
-Multi-page map series, GeoPDF, USNG grid, sheet rotation, saved print templates.
+Multi-page map series, USNG grid, sheet rotation, saved print templates.
+
+Georeferencing is no longer deferred: sheets carry an ISO 32000 geospatial
+viewport so they can be imported back into CloudTAK, ATAK and TAK Aware as
+overlays. See [GEOREFERENCING.md](GEOREFERENCING.md).
 
 If the drawn area in fit-to-area mode does not fit one sheet, v1 shows the overflow and asks the user to zoom out or pick a larger sheet, rather than silently cropping.
 

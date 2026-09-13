@@ -25,6 +25,7 @@
         "geomagnetism": "^0.2.0",
         "jsonwebtoken": "^9.0.0",
         "maplibre-gl": "^6.0.0",
+        "pdf-lib": "^1.17.1",
         "playwright": "^1.49.0"
     },
     "devDependencies": {

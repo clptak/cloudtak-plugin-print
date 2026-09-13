@@ -83,6 +83,14 @@ export const PrintRequest = Type.Object({
         label: Type.Optional(Type.String({ maxLength: 100 })),
     })),
 
+    /**
+     * Embed a geospatial viewport over the map frame, making the sheet a
+     * geospatial PDF that CloudTAK, and anything else driven by GDAL, can import
+     * as a georeferenced overlay. On by default: it costs nothing to print and
+     * a sheet that cannot be put back on a map is a dead end. See lib/georef.ts.
+     */
+    georeference: Type.Optional(Type.Boolean()),
+
     furniture: Type.Optional(Type.Object({
         grid: Type.Optional(Type.Union([Type.Literal('utm'), Type.Literal('none')])),
         legend: Type.Optional(Type.Boolean()),

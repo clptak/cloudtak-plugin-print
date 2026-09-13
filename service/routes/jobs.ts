@@ -13,6 +13,7 @@ import { scaleBar, northArrow, declinationAt } from '../lib/furniture.js';
 import { parseQr, qrInches, qrSvg } from '../lib/qr.js';
 import { renderMap } from '../lib/render.js';
 import { composeSheet } from '../lib/sheet.js';
+import { georeference } from '../lib/georef.js';
 import { smokeRender } from '../lib/browser.js';
 import type { Queue, JobRecord } from '../lib/queue.js';
 
@@ -264,6 +265,32 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 });
 
                 ctx.progress(1, 'complete');
+
+                // A failure here must not cost the sheet. The render is the
+                // expensive part and the PDF is already correct as a printed
+                // document; losing the georeferencing is worth a warning, not a
+                // dead job. The warning says so rather than leaving the caller to
+                // discover it when the import is refused.
+                if (body.georeference !== false) {
+                    try {
+                        return {
+                            body: await georeference(pdf, {
+                                sheet: geometry.sheet,
+                                frame: geometry.frame,
+                                origin: { left: MARGINS.left, top: MARGINS.top },
+                                center,
+                                scale,
+                            }),
+                            contentType: 'application/pdf',
+                            warnings: result.warnings,
+                        };
+                    } catch (err) {
+                        result.warnings.push(
+                            'sheet could not be georeferenced and will not import as an overlay: '
+                            + (err instanceof Error ? err.message : String(err)),
+                        );
+                    }
+                }
 
                 return { body: pdf, contentType: 'application/pdf', warnings: result.warnings };
             }, derived);

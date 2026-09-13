@@ -141,12 +141,20 @@ export function sheetHtml(opts: SheetOptions): string {
   }
 
   /* The neatline is the map's border and the reference edge for grid labels
-     later, so it is drawn as a real element rather than an image effect. */
+     later, so it is drawn as a real element rather than an image effect.
+
+     It is an outline, not a border, because an outline takes no part in layout.
+     As a border it sat INSIDE the box, pushing the map image half a point down
+     and right of the frame origin while the grid -- drawn from MARGINS directly
+     -- assumed no such inset. The two were out of register by 0.5pt: 0.18mm on
+     paper, but 4m on the ground at 1:24,000, measured against the very grid
+     that is there to be measured against. The georeferenced viewport is
+     declared from the same origin, so all three now agree on one rectangle. */
   .frame {
     position: relative;
     width: ${frame.width}in;
     height: ${frame.height}in;
-    border: 0.5pt solid #111;
+    outline: 0.5pt solid #111;
     overflow: hidden;
   }
 
