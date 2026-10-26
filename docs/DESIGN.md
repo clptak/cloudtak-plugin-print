@@ -348,7 +348,10 @@ If the drawn area in fit-to-area mode does not fit one sheet, v1 shows the overf
       context: ${HOME_DIRECTORY_PATH}/tak-stack/cloudtak-plugin-print/service
       dockerfile: Dockerfile
     restart: unless-stopped
-    depends_on: [api, tiles, store]
+    depends_on:
+      - ${PRINT_API_SERVICE:-cloudtak-api}
+      - ${PRINT_TILES_SERVICE:-cloudtak-tiles}
+      - ${PRINT_STORE_SERVICE:-cloudtak-store}
     expose:
       - "5010"
     shm_size: '1gb'
@@ -378,7 +381,7 @@ Notes:
 - **`shm_size: 1gb`** — Docker's 64 MB `/dev/shm` default crashes Chromium on large canvases.
 - **`PRINT_CONCURRENCY` defaults to 1** — the box's CPU limits already sum to roughly 19 and it carries live traffic. Raise it after measuring, or after TAK Server moves off this host.
 - **`PRINT_MAX_DPI` defaults to 200.** Both knobs are env vars precisely because this box's resource budget is expected to change.
-- **Internal URLs default to `api:5000` and `tiles:5002`.** `PRINT_API_INTERNAL_URL` and `PRINT_TILES_INTERNAL_URL` in the stack `.env` override them. `depends_on` is the literal service names `api`, `tiles`, and `store`; a renamed stack edits those three names in the pasted block. `${VAR:-api}` is not used there, because TAK Portal's depends_on rewriter drops any entry containing `:`.
+- **Internal URLs default to `api:5000` and `tiles:5002`.** `PRINT_API_INTERNAL_URL` and `PRINT_TILES_INTERNAL_URL` in the stack `.env` override them. `depends_on` defaults to `cloudtak-api`, `cloudtak-tiles`, and `cloudtak-store`, overridable with `PRINT_API_SERVICE`, `PRINT_TILES_SERVICE`, and `PRINT_STORE_SERVICE`. A stock compose file sets those three to `api`, `tiles`, and `store`. TAK Portal leaves the lines in place, and Compose interpolates them.
 
 ### Caddy
 

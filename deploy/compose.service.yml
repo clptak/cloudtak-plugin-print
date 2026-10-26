@@ -29,15 +29,14 @@
       context: ./cloudtak-plugin-print/service
       dockerfile: Dockerfile
     restart: unless-stopped
-    # Stock CloudTAK service names (dfpc-coe/CloudTAK docker-compose.yml).
-    # A stack that names them cloudtak-api / cloudtak-tiles / cloudtak-store
-    # replaces these three lines in its pasted block. Do not write ${VAR:-api}
-    # here: TAK Portal rewrites this file before Compose interpolates, and its
-    # depends_on parser stops at ':' and drops the entry.
+    # This project's service names. A stock CloudTAK compose file calls them
+    # api, tiles, and store; set PRINT_API_SERVICE, PRINT_TILES_SERVICE, and
+    # PRINT_STORE_SERVICE in that stack's .env. TAK Portal leaves these lines
+    # in place, and Compose interpolates them from the stack .env.
     depends_on:
-      - api
-      - tiles
-      - store
+      - ${PRINT_API_SERVICE:-cloudtak-api}
+      - ${PRINT_TILES_SERVICE:-cloudtak-tiles}
+      - ${PRINT_STORE_SERVICE:-cloudtak-store}
     expose:
       - "5010"
     # Docker's 64MB /dev/shm default crashes Chromium on large canvases.
