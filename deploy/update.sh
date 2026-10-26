@@ -43,10 +43,10 @@ STACK_DIR="${STACK_DIR:-$(dirname "$REPO_DIR")}"
 CLOUDTAK_DIR="${CLOUDTAK_DIR:-$STACK_DIR/CloudTAK}"
 
 PLUGIN_SRC="$REPO_DIR/plugin"
-PLUGIN_DEST="$CLOUDTAK_DIR/api/web/plugins/print"
+PLUGIN_DEST="$CLOUDTAK_DIR/app/plugins/print"
 
 [ -f "$STACK_DIR/docker-compose.yml" ] || die "no docker-compose.yml in $STACK_DIR (set STACK_DIR)"
-[ -d "$CLOUDTAK_DIR/api/web" ]         || die "no CloudTAK web tree at $CLOUDTAK_DIR (set CLOUDTAK_DIR)"
+[ -d "$CLOUDTAK_DIR/app" ]             || die "no CloudTAK web tree at $CLOUDTAK_DIR/app -- needs CloudTAK 13.102 or newer (or set CLOUDTAK_DIR)"
 [ -d "$PLUGIN_SRC" ]                   || die "no plugin/ directory in $REPO_DIR"
 
 say "Paths"
@@ -117,7 +117,7 @@ if [ "$BUILD_PLUGIN" -eq 1 ]; then
 
     # Belt and braces before an rm -rf on someone's machine.
     case "$PLUGIN_DEST" in
-        */api/web/plugins/print) ;;
+        */app/plugins/print) ;;
         *) die "refusing to remove $PLUGIN_DEST -- not a plugins/print path" ;;
     esac
 

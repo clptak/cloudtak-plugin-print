@@ -186,13 +186,13 @@ Playwright is also pinned to the full Chromium build in new-headless mode (`chan
 
 Three things in CloudTAK's live style only work inside a browser tab, and each needed an answer.
 
-**Sprites are a custom protocol.** `sprite` is `cloudtak-sprite://<id>`, a MapLibre protocol backed by the client's Dexie database (`api/web/src/stores/modules/icons.ts`). There is no Dexie here, so it is rewritten to `/api/iconset/<id>/sprite` on `cloudtak-api` — the same endpoint the client's own cache-miss path falls back to, not an invented one.
+**Sprites are a custom protocol.** `sprite` is `cloudtak-sprite://<id>`, a MapLibre protocol backed by the client's Dexie database (`app/src/stores/modules/icons.ts`). There is no Dexie here, so it is rewritten to `/api/iconset/<id>/sprite` on `cloudtak-api` — the same endpoint the client's own cache-miss path falls back to, not an invented one.
 
 **Most CoT icons are not in any sprite.** CloudTAK resolves them lazily through a `styleimagemissing` handler that reads Dexie per icon id. Reimplementing that resolver server-side would mean guessing at the same bitmap. Instead the plugin harvests the images from the live map (`map.listImages()` / `map.getImage()`) and ships them with the job as base64 RGBA; the service replays them with `map.addImage()`, both up front and from its own `styleimagemissing` handler. What prints is then literally the bitmap the user was looking at.
 
 **Glyphs and tiles point at public hostnames.** Rewritten to the internal service addresses so a thousand requests per sheet stay on the docker network. The public hostnames are derived from CloudTAK's own `API_URL` and `PMTILES_URL` rather than configured again — a hand-written guess at the hostname silently turns every internal rewrite into an allowlist rejection.
 
-**Overlays are fronted by a third browser-only protocol.** Overlay sources are `cloudtak-tilejson://<id>`, resolved from Dexie (`api/web/src/stores/modules/tilejson.ts`). Unlike sprites there is no server-side equivalent, so **the plugin must resolve these to concrete tile URLs before submitting**. If one reaches the service it is dropped with a warning naming the protocol, because silently losing every overlay on a printed sheet is the worst available outcome.
+**Overlays are fronted by a third browser-only protocol.** Overlay sources are `cloudtak-tilejson://<id>`, resolved from Dexie (`app/src/stores/modules/tilejson.ts`). Unlike sprites there is no server-side equivalent, so **the plugin must resolve these to concrete tile URLs before submitting**. If one reaches the service it is dropped with a warning naming the protocol, because silently losing every overlay on a printed sheet is the worst available outcome.
 
 ### The allowlist is enforced twice, on purpose
 
@@ -449,7 +449,7 @@ The cost: this breaks the pattern of the other twelve `cloudtak-plugin-*` repos,
 Symlink into the CloudTAK web tree:
 
 ```
-~/CloudTAK/api/web/plugins/print -> ~/dev/cloudtak-plugin-print/plugin
+~/CloudTAK/app/plugins/print -> ~/dev/cloudtak-plugin-print/plugin
 ```
 
 Note the `/plugin` suffix — unlike the other plugins, this repo root is not the plugin.

@@ -4,13 +4,15 @@ The CloudTAK client-side plugin.
 
 ## Installation
 
+Requires CloudTAK 13.102 or newer, where the web client lives in `app/`.
+
 Symlink this directory — not the repository root — into the CloudTAK web tree:
 
 ```sh
-ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/api/web/plugins/print
+ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/app/plugins/print
 ```
 
-`api/web/plugins/` is gitignored, so this leaves no trace in the CloudTAK repo.
+`app/plugins/` is gitignored, so this leaves no trace in the CloudTAK repo.
 Or bake it in at image build time with the `WEB_PLUGINS` build arg on `cloudtak-api`.
 
 ## Layout

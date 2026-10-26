@@ -57,23 +57,25 @@ git clone https://github.com/clptak/cloudtak-plugin-print.git
 
 ### 1. Plugin
 
+This plugin is for **CloudTAK 13.102 and newer**, where the web client lives in `app/`. Earlier releases kept it in `api/web/`, and the paths below will not match them.
+
 **On a deployment**, copy it into the web tree before building the API image. Docker will not follow a symlink out of its build context, so this is a copy:
 
 ```sh
 cd ~/tak-stack
-rm -rf CloudTAK/api/web/plugins/print
-cp -r cloudtak-plugin-print/plugin CloudTAK/api/web/plugins/print
+rm -rf CloudTAK/app/plugins/print
+cp -r cloudtak-plugin-print/plugin CloudTAK/app/plugins/print
 ```
 
 **For development**, a symlink is better — edits show up without re-copying:
 
 ```sh
-ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/api/web/plugins/print
+ln -sfn ~/dev/cloudtak-plugin-print/plugin ~/CloudTAK/app/plugins/print
 ```
 
 Note the `/plugin` suffix in both. The other plugins install their repo root; this one cannot, because the root also holds the service.
 
-`api/web/plugins/` is gitignored, so neither leaves a mark on your CloudTAK repo.
+`app/plugins/` is gitignored, so neither leaves a mark on your CloudTAK repo.
 
 > `WEB_PLUGINS` cannot install this repo. That build arg clones a repo into
 > `plugins/<repo-name>/` and CloudTAK's loader then looks for
@@ -179,7 +181,7 @@ Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what ch
 | `STACK_DIR`, `CLOUDTAK_DIR` | override the assumed layout |
 | `PRINT_HOST` | also check the public route through Caddy afterwards |
 
-It refuses to run with uncommitted changes in the repository, refuses if the paths do not look like a stack, and refuses to delete a plugin destination that is not a `.../api/web/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96 anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
+It refuses to run with uncommitted changes in the repository, refuses if the paths do not look like a stack, and refuses to delete a plugin destination that is not a `.../app/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96 anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
 blocky hillshade.
 
 ## Verifying the render path
@@ -222,7 +224,7 @@ files. Both were verified to miss a deliberate type error in `plugin/lib/`.
 Copy the plugin to a real directory under `plugins/` and check that:
 
 ```sh
-cd ~/CloudTAK/api/web
+cd ~/CloudTAK/app
 cp -R ~/dev/cloudtak-plugin-print/plugin plugins/print-check
 npx vue-tsc --noEmit 2>&1 | grep print-check     # nothing = clean
 npx eslint --config eslint.config.js ./plugins/print-check
