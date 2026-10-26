@@ -99,8 +99,8 @@ export default function config(): Config {
     cached = {
         port: int('PRINT_PORT', 5010),
         signingSecret: required('SigningSecret'),
-        apiUrl: process.env.API_INTERNAL_URL || 'http://cloudtak-api:5000',
-        tilesInternalUrl: process.env.TILES_INTERNAL_URL || 'http://cloudtak-tiles:5002',
+        apiUrl: process.env.API_INTERNAL_URL || 'http://api:5000',
+        tilesInternalUrl: process.env.TILES_INTERNAL_URL || 'http://tiles:5002',
         tilesPublicHost: hostOf(process.env.TILES_PUBLIC_HOST || process.env.PMTILES_URL),
         apiPublicHost: hostOf(process.env.API_PUBLIC_HOST || process.env.API_URL),
         allowHosts: (process.env.PRINT_ALLOW_HOSTS || '')

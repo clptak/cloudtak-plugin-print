@@ -92,6 +92,15 @@ Paste the `cloudtak-print` block from `deploy/compose.service.yml` into the `ser
 
 Copy `service/.env.example` for the variable list. Only `SigningSecret` is strictly required — the same value the other CloudTAK services already use, which is how the service verifies CloudTAK's own JWTs.
 
+The shipped service block calls the API at `http://api:5000` and tiles at `http://tiles:5002`, and waits for services `api`, `tiles`, and `store`. That matches upstream CloudTAK. A stack that names those containers `cloudtak-api`, `cloudtak-tiles`, and `cloudtak-store` sets this in the stack `.env`:
+
+```sh
+PRINT_API_INTERNAL_URL=http://cloudtak-api:5000
+PRINT_TILES_INTERNAL_URL=http://cloudtak-tiles:5002
+```
+
+and changes the three `depends_on` entries in the pasted block to those service names. Compose reads `PRINT_*` while interpolating the file. Putting `API_INTERNAL_URL` in `.env` alone does nothing: the service's `environment:` list wins over `env_file:`.
+
 ```sh
 docker compose build cloudtak-print
 docker compose up -d cloudtak-print
@@ -152,6 +161,8 @@ docker compose build \
 ```
 
 Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what changed**. That distinction matters: `cloudtak-print` builds in seconds, while `cloudtak-api` rebuilds the entire CloudTAK web application and takes minutes of downtime — so a service-only change should never trigger it, and a docs-only change should rebuild nothing at all.
+
+`update.sh` pulls this repository and rebuilds images. It does not edit the `cloudtak-print` block already pasted into the stack `docker-compose.yml`. After pulling a change to `deploy/compose.service.yml`, re-paste that block (or edit the live one to match) and recreate the container. On this renamed stack the `.env` must contain `PRINT_API_INTERNAL_URL=http://cloudtak-api:5000` and `PRINT_TILES_INTERNAL_URL=http://cloudtak-tiles:5002`, and `depends_on` must stay `cloudtak-api`, `cloudtak-tiles`, `cloudtak-store`. Check the resolved file with `docker compose config` and, from inside the print container, `getent hosts` on the host in `API_INTERNAL_URL`. A marketplace install does not need those variables: TAK Portal composes the overlay from the stack directory, so an unset `PRINT_*` becomes `http://api:5000` and `http://tiles:5002`, and the literal `depends_on` names are ones Portal already keeps.
 
 | | |
 |---|---|
