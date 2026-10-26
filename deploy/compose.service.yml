@@ -29,10 +29,11 @@
       context: ./cloudtak-plugin-print/service
       dockerfile: Dockerfile
     restart: unless-stopped
-    # This project's service names. A stock CloudTAK compose file calls them
-    # api, tiles, and store; set PRINT_API_SERVICE, PRINT_TILES_SERVICE, and
-    # PRINT_STORE_SERVICE in that stack's .env. TAK Portal leaves these lines
-    # in place, and Compose interpolates them from the stack .env.
+    # Defaults are stock CloudTAK's service names: api, tiles, and store. A
+    # stack that names them cloudtak-api, cloudtak-tiles, and cloudtak-store
+    # sets PRINT_API_SERVICE, PRINT_TILES_SERVICE, and PRINT_STORE_SERVICE in
+    # its .env. TAK Portal leaves these lines in place, and Compose
+    # interpolates them from the stack .env.
     depends_on:
       - ${PRINT_API_SERVICE:-api}
       - ${PRINT_TILES_SERVICE:-tiles}
