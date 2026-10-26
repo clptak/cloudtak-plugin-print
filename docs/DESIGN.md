@@ -31,7 +31,7 @@ Non-goals for v1: sheet rotation, multi-page series. (Georeferenced PDF and the 
 | Renderer | Headless Chromium + maplibre-gl-js | Pixel fidelity with CloudTAK's own client; same style spec, sprites, glyphs; no native build |
 | Area selection | Scale-first (primary), fit-to-area (secondary) | Round scales are measurable in the field; fit-to-area is a convenience |
 | Sheet rotation | **North-up only** | Used with map, compass, and UTM grid; rotation would make grid lines run diagonally and force per-edge label intersection |
-| Grid system | **UTM or USNG**, one selector, plus Off | Same lines either way — USNG is a labeling layer on the zone-aware UTM engine, as v1 intended. USNG and MGRS print identical references inside the US |
+| Grid system | **UTM or MGRS / USNG**, one selector, plus Off | Same lines either way — USNG is a labeling layer on the zone-aware UTM engine, as v1 intended. The menu reads MGRS / USNG. USNG and MGRS print identical references inside the US |
 | Grid interval | Derived from scale, no UI control | Printed grid tools are cut for specific scale/interval pairings |
 | Preview | Client-side box while dragging + one server render on demand | One layout engine; no per-drag server cost |
 | Composition | HTML page layout via Chromium `page.pdf()` | Vector text and vector grid lines; only map imagery is raster |

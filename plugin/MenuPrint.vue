@@ -331,12 +331,14 @@ const markLabel = ref('Normal — 100%');
 /*
  * UTM on by default: the grid is the reason most of these sheets get printed.
  *
- * USNG draws the same lines -- a USNG grid IS the UTM grid -- so it is a choice
- * of labelling, and one control rather than two toggles that could both be on.
- * USNG and MGRS print identical references inside the US; the name and the
- * datum are the only difference.
+ * MGRS / USNG draws the same lines -- that grid IS the UTM grid -- so it is a
+ * choice of labelling, and one control rather than two toggles that could both
+ * be on. USNG and MGRS print identical references inside the US; the name and
+ * the datum are the only difference. The menu names both so the option is
+ * recognisable outside the US. The print request still sends grid: 'usng'.
  */
-const GRID_OPTIONS = ['UTM', 'USNG', 'Off'];
+const GRID_MGRS_USNG = 'MGRS / USNG';
+const GRID_OPTIONS = ['UTM', GRID_MGRS_USNG, 'Off'];
 const gridChoice = ref('UTM');
 const grid = computed(() => {
     return gridChoice.value !== 'Off';
@@ -502,7 +504,7 @@ const gridMetres = computed(() => {
     if (!info.value?.scales.length) return 0;
 
     // USNG steps in powers of ten, on a ladder the service publishes whole.
-    if (gridChoice.value === 'USNG' && info.value.usngLadder?.length) {
+    if (gridChoice.value === GRID_MGRS_USNG && info.value.usngLadder?.length) {
         const ladder = info.value.usngLadder;
         const step = ladder.find((r) => {
             return r.max === null || scale.value <= r.max;
@@ -620,7 +622,7 @@ async function compose(preview: boolean): Promise<PrintRequest> {
         qr,
         georeference: geopdf.value,
         furniture: {
-            grid: gridChoice.value === 'USNG' ? 'usng' : gridChoice.value === 'UTM' ? 'utm' : 'none',
+            grid: gridChoice.value === GRID_MGRS_USNG ? 'usng' : gridChoice.value === 'UTM' ? 'utm' : 'none',
             branding: agency.value || undefined,
         },
     };
