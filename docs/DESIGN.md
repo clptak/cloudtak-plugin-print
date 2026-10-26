@@ -18,7 +18,7 @@ Anything that changes those pieces should be re-checked the same way: print it a
 
 Produce a print-quality PDF map from CloudTAK — basemap plus live operational overlays — at a chosen scale on a standard American sheet, suitable for use in the field with a map, compass, and UTM grid tool.
 
-Non-goals for v1: georeferenced PDF, USNG/MGRS grid, sheet rotation, multi-page series.
+Non-goals for v1: sheet rotation, multi-page series. (Georeferenced PDF and the USNG grid were non-goals for v1 and have since been built — see [GEOREFERENCING.md](GEOREFERENCING.md) and section 8.3.)
 
 ---
 
@@ -31,7 +31,7 @@ Non-goals for v1: georeferenced PDF, USNG/MGRS grid, sheet rotation, multi-page 
 | Renderer | Headless Chromium + maplibre-gl-js | Pixel fidelity with CloudTAK's own client; same style spec, sprites, glyphs; no native build |
 | Area selection | Scale-first (primary), fit-to-area (secondary) | Round scales are measurable in the field; fit-to-area is a convenience |
 | Sheet rotation | **North-up only** | Used with map, compass, and UTM grid; rotation would make grid lines run diagonally and force per-edge label intersection |
-| Grid system | **UTM only** in v1 | USNG deferred; grid engine built zone-aware so USNG is a labeling layer later, not a rewrite |
+| Grid system | **UTM or USNG**, one selector, plus Off | Same lines either way — USNG is a labeling layer on the zone-aware UTM engine, as v1 intended. USNG and MGRS print identical references inside the US |
 | Grid interval | Derived from scale, no UI control | Printed grid tools are cut for specific scale/interval pairings |
 | Preview | Client-side box while dragging + one server render on demand | One layout engine; no per-drag server cost |
 | Composition | HTML page layout via Chromium `page.pdf()` | Vector text and vector grid lines; only map imagery is raster |
@@ -315,6 +315,22 @@ Reasoning: 1:24,000 is the USGS quad scale and what most people's grid tools are
 **CONFIRMED 2026-09-06 — convention, not spacing math.** Pure spacing math says 2000 m at 1:50,000 and 1:62,500. Military convention says 1000 m, and issued protractors assume it. Convention wins: a grid a team cannot measure with the tool in their pocket is worse than a slightly crowded one.
 
 Every threshold in `gridInterval()` sits on a scale in the list above, which is what lets the plugin derive the interval for a custom scale by taking the first rung at or above it — the same lookup `snapScale()` uses. That equivalence is not a coincidence to be relied on quietly; `service/test/base.test.ts` asserts it across the whole range, so moving a band or dropping a scale fails a test rather than silently printing a grid interval the panel did not advertise.
+
+### 8.3a USNG grid interval by scale
+
+USNG is read in powers of ten — every line is a digit of the reference — so it never uses the 200 m, 500 m or 5 km rungs above. Spacing on a Letter sheet:
+
+| Scale | Dense (live) | Sparse (alternative) |
+|---|---|---|
+| 1:6,000 | 100 m — 0.66 in, ~11 lines | 100 m |
+| 1:12,000 | **100 m — 0.33 in, ~22 lines** | **1000 m — 3.28 in, ~2 lines** |
+| 1:15,840 – 1:62,500 | 1000 m | 1000 m |
+| 1:100,000 | **1000 m — 0.39 in, ~19 lines** | **10 km — 3.94 in, ~1 line** |
+| above 1:100,000 | 10 km to 1:1,000,000, then 100 km | same |
+
+**DECISION POINT, 2026-10-26 — dense, reversible.** Only 1:12,000 and 1:100,000 differ. Dense was chosen because a grid exists to read positions from, and two lines across a sheet gives almost nothing to read; 0.33 in squares are still wider than a fingertip and a romer covers them. It was chosen knowing users might prefer sparse. To reverse: set `USNG_LADDER = USNG_SPARSE` in `service/lib/geo.ts`. Nothing else changes — the panel reads the live ladder from `GET /print-api` (`usngLadder`) rather than keeping its own copy, and `service/test/usng.test.ts` pins both ladders so the swap is a one-line change plus one expectation.
+
+Unlike the UTM ladder, the USNG one runs past the standard scale list (a custom 1:250,000 sheet needs the 10 km rung), which is why it is published whole rather than per rung.
 
 ### 8.4 Output
 

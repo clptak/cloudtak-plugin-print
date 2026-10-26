@@ -92,7 +92,7 @@ export const PrintRequest = Type.Object({
     georeference: Type.Optional(Type.Boolean()),
 
     furniture: Type.Optional(Type.Object({
-        grid: Type.Optional(Type.Union([Type.Literal('utm'), Type.Literal('none')])),
+        grid: Type.Optional(Type.Union([Type.Literal('utm'), Type.Literal('usng'), Type.Literal('none')])),
         legend: Type.Optional(Type.Boolean()),
         declination: Type.Optional(Type.Boolean()),
         branding: Type.Optional(Type.String({ maxLength: 64 })),

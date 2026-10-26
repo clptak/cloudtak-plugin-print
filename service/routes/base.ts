@@ -2,7 +2,7 @@ import Schema from '@openaddresses/batch-schema';
 import { Type } from '@sinclair/typebox';
 import config from '../lib/config.js';
 import { PAPER, MARGINS, GRID_GUTTER } from '../lib/paper.js';
-import { STANDARD_SCALES, gridInterval } from '../lib/geo.js';
+import { STANDARD_SCALES, gridInterval, USNG_LADDER } from '../lib/geo.js';
 
 export default async function router(schema: Schema) {
     schema.get('/print-api', {
@@ -51,6 +51,17 @@ export default async function router(schema: Schema) {
                 scale: Type.Integer(),
                 grid: Type.Integer(),
             })),
+            /**
+             * The live USNG interval ladder, published whole rather than per rung.
+             * Its thresholds run past the standard scale list -- a custom 1:250,000
+             * sheet needs the 10 km rung -- and publishing the ladder means the
+             * panel's readout follows whichever ladder the service has active
+             * instead of keeping a copy that would silently disagree.
+             */
+            usngLadder: Type.Array(Type.Object({
+                max: Type.Union([Type.Integer(), Type.Null()]),
+                interval: Type.Integer(),
+            })),
         }),
     }, (req, res) => {
         const c = config();
@@ -82,6 +93,7 @@ export default async function router(schema: Schema) {
             scales: STANDARD_SCALES.map((scale) => {
                 return { scale, grid: gridInterval(scale) };
             }),
+            usngLadder: USNG_LADDER,
         });
     });
 

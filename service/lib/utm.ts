@@ -69,6 +69,60 @@ export function bandFor(latitude: number): string {
     return BANDS[Math.floor((latitude + 80) / 8)];
 }
 
+/*
+ * USNG / MGRS 100 km grid squares.
+ *
+ * USNG and MGRS share this lettering. Inside the US they produce the same
+ * string -- 12S VD 3083 6698 is valid as both -- and differ only in name and
+ * datum (NAD 83 for USNG, WGS 84 for MGRS: about a metre here). This is the
+ * current "AA" scheme used with WGS 84 and NAD 83; the older "AL" scheme for
+ * Clarke ellipsoids is deliberately not supported.
+ *
+ * Columns cycle through three sets of eight letters, one set per zone, repeating
+ * every three zones. Rows cycle through twenty letters every 2,000 km of
+ * northing, offset by five in even-numbered zones so that adjacent zones never
+ * share a square ID along their common boundary.
+ */
+const COLUMN_SETS = ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'];
+const ROW_LETTERS = 'ABCDEFGHJKLMNPQRSTUV';
+
+/** The two-letter 100 km square identifier, e.g. 'VD'. */
+export function squareId(zone: number, easting: number, northing: number): string {
+    const column = COLUMN_SETS[(zone - 1) % 3][Math.floor(easting / 100000) - 1];
+    const row = ROW_LETTERS[(Math.floor(northing / 100000) + (zone % 2 === 0 ? 5 : 0)) % 20];
+
+    // Easting 100 km index runs 1-8 everywhere a zone is valid; anything else is
+    // a position forced into a zone it does not belong to.
+    if (!column || !row) {
+        throw new Error(`no 100 km square for zone ${zone}, E ${Math.round(easting)}, N ${Math.round(northing)}`);
+    }
+
+    return column + row;
+}
+
+/**
+ * A USNG reference, e.g. '12S VD 3083 6698'.
+ *
+ * `digits` is per axis: 4 gives 10 m, 5 gives 1 m. Digits are TRUNCATED, never
+ * rounded -- a USNG reference names the square the point lies in, and rounding
+ * would name the one next to it half the time.
+ *
+ * Outside 80 S to 84 N the system is UPS, not UTM, and is not supported.
+ */
+export function usng(longitude: number, latitude: number, digits = 4, zone?: number): string {
+    if (latitude < -80 || latitude > 84) {
+        throw new Error(`latitude ${latitude} is outside the USNG/MGRS UTM domain (80 S to 84 N)`);
+    }
+
+    const u = toUTM(longitude, latitude, zone);
+    const unit = 10 ** (5 - digits);
+    const pad = (v: number) => {
+        return String(Math.floor((v % 100000) / unit)).padStart(digits, '0');
+    };
+
+    return `${u.zone}${bandFor(latitude)} ${squareId(u.zone, u.easting, u.northing)} ${pad(u.easting)} ${pad(u.northing)}`;
+}
+
 /** Central meridian of a zone, in degrees. */
 export function centralMeridian(zone: number): number {
     return (zone - 1) * 6 - 180 + 3;

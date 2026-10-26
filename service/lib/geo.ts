@@ -107,6 +107,48 @@ export function snapScale(scale: number): number {
     return rung ?? Math.ceil(scale / 10000) * 10000;
 }
 
+/** One rung: the interval used at every scale up to `max`. `max: null` is open-ended. */
+export type Rung = { max: number | null; interval: number };
+
+/**
+ * USNG grid intervals.
+ *
+ * USNG is read in powers of ten -- each line is a digit of the reference -- so
+ * unlike the UTM ladder below it never uses 200 m, 500 m or 5 km. Two scales
+ * have no comfortable power of ten on a Letter sheet: at 1:12,000 the choice is
+ * 22 lines at 0.33 in or 2 lines, and at 1:100,000 it is 19 lines at 0.39 in or
+ * 1 line.
+ *
+ * DECISION POINT, 2026-10-26: the dense ladder is live, on the reasoning that a
+ * grid exists to read positions from and two lines across a sheet gives almost
+ * nothing to read. It was chosen knowing users might prefer the sparse ladder.
+ * To reverse it, change USNG_LADDER to USNG_SPARSE -- nothing else depends on
+ * which one is active; the plugin reads the ladder from GET /print-api.
+ */
+export const USNG_DENSE: Rung[] = [
+    { max: 12000, interval: 100 },
+    { max: 100000, interval: 1000 },
+    { max: 1000000, interval: 10000 },
+    { max: null, interval: 100000 },
+];
+
+export const USNG_SPARSE: Rung[] = [
+    { max: 6000, interval: 100 },
+    { max: 62500, interval: 1000 },
+    { max: 1000000, interval: 10000 },
+    { max: null, interval: 100000 },
+];
+
+export const USNG_LADDER: Rung[] = USNG_DENSE;
+
+export function usngInterval(scale: number, ladder: Rung[] = USNG_LADDER): number {
+    const rung = ladder.find((r) => {
+        return r.max === null || scale <= r.max;
+    });
+
+    return (rung ?? ladder[ladder.length - 1]).interval;
+}
+
 /**
  * Grid interval in metres for a given scale. Derived from the scale rather than
  * chosen by the user, because printed UTM grid tools are cut for specific
