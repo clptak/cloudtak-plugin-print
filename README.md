@@ -23,11 +23,11 @@ One repo because the job-request contract spans both halves: every change to it 
 
 ## Status
 
-Working end to end: pick a scale and sheet size in the panel, drag the box on the map, print. The sheet carries your live basemap and overlays, a zone-aware UTM grid with edge labels, a dual metric/imperial scale bar, a three-north diagram with declination from the offline World Magnetic Model, a title block, and optionally a Data Sync invite QR. A **GeoPDF** toggle, on by default, georeferences the sheet.
+Working end to end: pick a scale and sheet size in the panel, drag the box on the map, print. The sheet carries your live basemap and overlays, a zone-aware grid with edge labels — a **Grid** selector picks UTM, USNG (identical to MGRS inside the US) or Off — a dual metric/imperial scale bar, a three-north diagram with declination from the offline World Magnetic Model, a title block, and optionally a Data Sync invite QR. A **GeoPDF** toggle, on by default, georeferences the sheet.
 
 Printed sheets measure correctly against a 1:24,000 UTM tool, and are georeferenced — a sheet imports back into CloudTAK, ATAK or TAK Aware as a map overlay, with its margins transparent so it lands as map and only map. See `docs/GEOREFERENCING.md`.
 
-Not done: an overlay legend, fit-to-area mode, USNG. `docs/DESIGN.md` section 10 has the phase plan; `docs/OPEN-ISSUES.md` has the one parked defect (raster terrain shade).
+Not done: an overlay legend, fit-to-area mode. `docs/DESIGN.md` section 10 has the phase plan; `docs/OPEN-ISSUES.md` has the one parked defect (raster terrain shade).
 
 ## Install
 

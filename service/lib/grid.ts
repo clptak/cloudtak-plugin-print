@@ -1,4 +1,4 @@
-import { gridLines, labelParts, type BBox, type GridLine } from './utm.js';
+import { gridLines, labelParts, toUTM, squareId, bandFor, type BBox, type GridLine } from './utm.js';
 
 /**
  * Draw the UTM grid onto the sheet as SVG.
@@ -165,7 +165,78 @@ export type GridOptions = {
     /** Grid line weight in millimetres. */
     lineMm?: number;
     colour?: string;
+    /**
+     * How the lines are labelled. The lines themselves are identical: a USNG
+     * grid IS the UTM grid. USNG labels each line with only its digits inside
+     * the 100 km square, draws the 100 km boundaries heavier, and marks the
+     * square IDs in the map when the sheet spans more than one.
+     */
+    system?: 'utm' | 'usng';
 };
+
+/** The digits a USNG reader writes for a line: its position inside the 100 km square. */
+export function usngDigits(value: number, interval: number): string {
+    const digits = 5 - Math.round(Math.log10(interval));
+    if (digits <= 0) return '';
+
+    return String(Math.floor((value % 100000) / interval)).padStart(digits, '0');
+}
+
+export type SquareLabel = { label: string; x: number; y: number };
+
+/**
+ * Where to print 100 km square IDs inside the map, if anywhere.
+ *
+ * Nothing when the sheet sits inside one square -- the title strip names it.
+ * When a 100 km line crosses the sheet the square ID CHANGES across it, and a
+ * reader on the wrong side would write the wrong reference, so every region
+ * gets labelled, at the middle of the part of it the sheet shows.
+ *
+ * A sheet that also straddles a latitude band boundary (32 N runs through
+ * Tucson) gets the grid zone designator on each label too: the square letters
+ * do not change across a band boundary, so the square ID alone would hide that
+ * the designator did.
+ *
+ * Regions are found by sampling, which is safe because each is the
+ * intersection of two near-rectangles and so convex: its sample centroid lies
+ * inside it.
+ */
+export function squareLabels(view: Viewport, zone: number, steps = 24): SquareLabel[] {
+    const [west, south, east, north] = viewportBBox(view, 0);
+    const project = projector(view);
+
+    const groups = new Map<string, { gzd: string; square: string; xs: number[]; ys: number[] }>();
+
+    for (let i = 0; i <= steps; i++) {
+        for (let j = 0; j <= steps; j++) {
+            const lon = west + ((east - west) * i) / steps;
+            const lat = south + ((north - south) * j) / steps;
+            const u = toUTM(lon, lat, zone);
+            const gzd = `${zone}${bandFor(lat)}`;
+            const square = squareId(zone, u.easting, u.northing);
+            const key = `${gzd} ${square}`;
+            const [x, y] = project(lon, lat);
+
+            if (!groups.has(key)) groups.set(key, { gzd, square, xs: [], ys: [] });
+            groups.get(key)!.xs.push(x);
+            groups.get(key)!.ys.push(y);
+        }
+    }
+
+    if (groups.size < 2) return [];
+
+    const bands = new Set([...groups.values()].map((g) => {
+        return g.gzd;
+    }));
+
+    return [...groups.values()].map((g) => {
+        return {
+            label: bands.size > 1 ? `${g.gzd} ${g.square}` : g.square,
+            x: g.xs.reduce((a, b) => a + b, 0) / g.xs.length,
+            y: g.ys.reduce((a, b) => a + b, 0) / g.ys.length,
+        };
+    });
+}
 
 /**
  * Render the grid as an SVG overlay spanning the whole sheet.
@@ -195,6 +266,7 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
     const lines = gridLines({ bbox: viewportBBox(view), zone, interval });
 
     const strokes: string[] = [];
+    const heavy: string[] = [];
     const ticks: string[] = [];
     const labels: string[] = [];
 
@@ -203,13 +275,29 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
     const gap = mm(1.6);
     const tick = mm(2.0);
 
+    const system = opts.system ?? 'utm';
+
     const label = (x: number, y: number, value: number, anchor: string, rotate = 0) => {
-        const parts = labelParts(value, interval);
         const at = `${x.toFixed(1)} ${y.toFixed(1)}`;
         const transform = rotate ? ` transform="rotate(${rotate} ${at})"` : '';
+        const open = `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}"${transform}`
+            + ` font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="${colour}">`;
 
-        return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}"${transform}`
-            + ` font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="${colour}">`
+        // USNG: only the digits inside the 100 km square, all of them principal.
+        // That is what the reader writes; the rest of the reference is in the
+        // title strip, or marked on the map where it changes.
+        if (system === 'usng') {
+            const digits = usngDigits(value, interval);
+            if (!digits) return '';
+
+            return open
+                + `<tspan font-size="${principalPx.toFixed(1)}" font-weight="700">${digits}</tspan>`
+                + `</text>`;
+        }
+
+        const parts = labelParts(value, interval);
+
+        return open
             + `<tspan font-size="${smallPx.toFixed(1)}">${parts.prefix}</tspan>`
             + `<tspan font-size="${principalPx.toFixed(1)}" font-weight="700">${parts.principal}</tspan>`
             + `<tspan font-size="${smallPx.toFixed(1)}">${parts.suffix}</tspan>`
@@ -225,8 +313,12 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
             return project(lon, lat);
         }) as Point[];
 
+        // USNG 100 km boundaries print heavier: the square ID changes across
+        // them, and they are what the in-map square labels sit either side of.
+        const boundary = system === 'usng' && Math.round(line.value) % 100000 === 0;
+
         for (const piece of clipToFrame(projected, view.width, view.height)) {
-            strokes.push(`<path d="${path(piece, ox, oy)}"/>`);
+            (boundary ? heavy : strokes).push(`<path d="${path(piece, ox, oy)}"/>`);
         }
 
         const cross = edgeCrossings(projected, view.width, view.height);
@@ -261,6 +353,19 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
     }
 
     const weight = mm(opts.lineMm ?? 0.25).toFixed(2);
+    const heavyWeight = mm((opts.lineMm ?? 0.25) * 2.4).toFixed(2);
+
+    // Square IDs inside the map, with the same halo the edge labels would need
+    // if they sat over terrain -- these always do.
+    const squares = system === 'usng'
+        ? squareLabels(view, zone).map((q) => {
+                return `<text x="${(ox + q.x).toFixed(1)}" y="${(oy + q.y).toFixed(1)}" text-anchor="middle"`
+                    + ` dominant-baseline="central" font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif"`
+                    + ` font-size="${mm(6).toFixed(1)}" font-weight="700" fill="${colour}" fill-opacity="0.85"`
+                    + ` stroke="#ffffff" stroke-width="${mm(0.8).toFixed(2)}" stroke-opacity="0.9"`
+                    + ` paint-order="stroke" stroke-linejoin="round">${q.label}</text>`;
+            })
+        : [];
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="grid" width="${sheetW}" height="${sheetH}"`
         + ` viewBox="0 0 ${sheetW} ${sheetH}">`
@@ -270,6 +375,11 @@ export function gridSvg(opts: GridOptions): { svg: string; lines: number; zone: 
         + `<g clip-path="url(#frame)"`
         + ` fill="none" stroke="${colour}" stroke-width="${weight}"`
         + ` stroke-opacity="0.75" stroke-linecap="butt">${strokes.join('')}</g>`
+        + (heavy.length
+            ? `<g clip-path="url(#frame)" fill="none" stroke="${colour}" stroke-width="${heavyWeight}"`
+            + ` stroke-opacity="0.85" stroke-linecap="butt">${heavy.join('')}</g>`
+            : '')
+        + `<g clip-path="url(#frame)">${squares.join('')}</g>`
         + `<g fill="none" stroke="${colour}" stroke-width="${weight}">${ticks.join('')}</g>`
         + labels.join('')
         + `</svg>`;

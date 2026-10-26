@@ -245,6 +245,8 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 
 **Labels.** Full easting/northing at the sheet corners, principal digits along the edges. Building this zone-aware from the start is what makes USNG a labeling layer later rather than a second implementation.
 
+**USNG labeling (built).** Same lines, same zone engine; only the labels and interval change. The title strip reads `USNG 12S VD · 1000 m` (zone, band and 100 km square at the sheet centre). Edge labels carry only the in-square digits for the interval — `30` at 1000 m, `308` at 100 m — truncated, never rounded. 100 km square boundaries are stroked heavier. Square IDs are printed inside the map only when the sheet spans more than one square, one label per square at the centroid of its visible part; when the sheet also crosses a latitude band the labels carry the full grid zone designator (`12R WA` / `12S WA`). Lettering is the standard AA scheme, checked against GeoTrans (`service/test/fixtures/usng-reference.json`, 411 points). UPS latitudes are refused.
+
 ---
 
 ## 7. Page furniture
@@ -343,7 +345,7 @@ Everything currently visible on the user's map, with a checklist in the print pa
 
 ### 8.6 Deferred to v2
 
-Multi-page map series, USNG grid, sheet rotation, saved print templates.
+Multi-page map series, sheet rotation, saved print templates.
 
 Georeferencing is no longer deferred: sheets carry an ISO 32000 geospatial
 viewport so they can be imported back into CloudTAK, ATAK and TAK Aware as

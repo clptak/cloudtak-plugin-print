@@ -43,6 +43,13 @@ export type PrintInfo = {
     margins: { top: number; right: number; bottom: number; left: number };
     gridGutter: number;
     scales: ScaleOption[];
+    /**
+     * The live USNG interval ladder: each rung applies up to `max`, and
+     * `max: null` is open-ended. Published whole because it runs past the
+     * standard scale list, and so the panel follows whichever ladder the service
+     * has active (see service/lib/geo.ts, USNG_LADDER).
+     */
+    usngLadder: Array<{ max: number | null; interval: number }>;
 };
 
 export type SheetGeometry = {
@@ -89,7 +96,7 @@ export type PrintRequest = {
      */
     georeference?: boolean;
     furniture?: {
-        grid?: 'utm' | 'none';
+        grid?: 'utm' | 'usng' | 'none';
         legend?: boolean;
         declination?: boolean;
         branding?: string;

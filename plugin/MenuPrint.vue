@@ -67,7 +67,7 @@
                         />
                     </div>
                     <div class='d-flex align-items-center'>
-                        <span class='subheader'>UTM Grid</span>
+                        <span class='subheader'>Grid</span>
                         <span
                             class='ms-auto'
                             v-text='gridLabel'
@@ -106,9 +106,10 @@
                 </div>
 
                 <div class='my-2'>
-                    <TablerToggle
-                        v-model='grid'
-                        label='UTM Grid'
+                    <TablerEnum
+                        v-model='gridChoice'
+                        label='Grid'
+                        :options='GRID_OPTIONS'
                     />
                 </div>
 
@@ -327,8 +328,19 @@ const orientationLabel = ref('Portrait');
 const qualityLabel = ref('Standard — 200 DPI');
 const markLabel = ref('Normal — 100%');
 
-// On by default: the grid is the reason most of these sheets get printed.
-const grid = ref(true);
+/*
+ * UTM on by default: the grid is the reason most of these sheets get printed.
+ *
+ * USNG draws the same lines -- a USNG grid IS the UTM grid -- so it is a choice
+ * of labelling, and one control rather than two toggles that could both be on.
+ * USNG and MGRS print identical references inside the US; the name and the
+ * datum are the only difference.
+ */
+const GRID_OPTIONS = ['UTM', 'USNG', 'Off'];
+const gridChoice = ref('UTM');
+const grid = computed(() => {
+    return gridChoice.value !== 'Off';
+});
 
 // On by default too. It costs nothing to print -- the georeferencing is invisible
 // to a printer -- and a sheet that cannot be put back on a map is a dead end.
@@ -489,6 +501,16 @@ const groundMetres = computed(() => {
 const gridMetres = computed(() => {
     if (!info.value?.scales.length) return 0;
 
+    // USNG steps in powers of ten, on a ladder the service publishes whole.
+    if (gridChoice.value === 'USNG' && info.value.usngLadder?.length) {
+        const ladder = info.value.usngLadder;
+        const step = ladder.find((r) => {
+            return r.max === null || scale.value <= r.max;
+        });
+
+        return (step ?? ladder[ladder.length - 1]).interval;
+    }
+
     const rung = info.value.scales.find((option) => {
         return option.scale >= scale.value;
     });
@@ -505,7 +527,7 @@ const footprintLabel = computed(() => {
 
 const gridLabel = computed(() => {
     if (!grid.value) return 'Off';
-    return gridMetres.value ? `${gridMetres.value.toLocaleString('en-US')} m` : '—';
+    return gridMetres.value ? `${gridChoice.value} \u00b7 ${gridMetres.value.toLocaleString('en-US')} m` : '—';
 });
 
 const centreLabel = computed(() => {
@@ -598,7 +620,7 @@ async function compose(preview: boolean): Promise<PrintRequest> {
         qr,
         georeference: geopdf.value,
         furniture: {
-            grid: grid.value ? 'utm' : 'none',
+            grid: gridChoice.value === 'USNG' ? 'usng' : gridChoice.value === 'UTM' ? 'utm' : 'none',
             branding: agency.value || undefined,
         },
     };

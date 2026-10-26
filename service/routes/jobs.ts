@@ -6,8 +6,8 @@ import config from '../lib/config.js';
 import { PrintRequest, JobStatus } from '../lib/types.js';
 import { sheet, footprint, MARGINS, GRID_GUTTER } from '../lib/paper.js';
 import { resolve } from '../lib/resolution.js';
-import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, type BBox } from '../lib/geo.js';
-import { zoneFor, bandFor } from '../lib/utm.js';
+import { zoomForScale, bboxCenter, scaleForBBox, snapScale, gridInterval, usngInterval, type BBox } from '../lib/geo.js';
+import { zoneFor, bandFor, toUTM, squareId } from '../lib/utm.js';
 import { gridSvg } from '../lib/grid.js';
 import { scaleBar, northArrow, declinationAt } from '../lib/furniture.js';
 import { parseQr, qrInches, qrSvg } from '../lib/qr.js';
@@ -181,8 +181,13 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                 // vector in the PDF. Zone comes from the sheet centre and is held
                 // across the whole page — a sheet crossing a zone boundary gets one
                 // continuous grid, which is the standard handling.
-                const wantsGrid = (body.furniture?.grid ?? 'utm') !== 'none';
-                const interval = gridInterval(scale);
+                //
+                // USNG draws the same lines; it differs in interval (powers of ten,
+                // see usngInterval) and in labelling.
+                const gridMode = body.furniture?.grid ?? 'utm';
+                const wantsGrid = gridMode !== 'none';
+                const system = gridMode === 'usng' ? 'usng' : 'utm';
+                const interval = system === 'usng' ? usngInterval(scale) : gridInterval(scale);
                 const zone = zoneFor(center[0], center[1]);
 
                 const grid = wantsGrid
@@ -198,8 +203,17 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                             layoutDpi: resolution.layoutDpi,
                             sheet: geometry.sheet,
                             frameOrigin: { x: MARGINS.left, y: MARGINS.top },
+                            system,
                         })
                     : undefined;
+
+                // The title strip names the grid zone and, for USNG, the 100 km
+                // square at the sheet centre. Where the sheet spans more than one
+                // square, the others are marked on the map itself.
+                const centreUtm = toUTM(center[0], center[1], zone);
+                const gridLabel = system === 'usng'
+                    ? `USNG ${zone}${bandFor(center[1])} ${squareId(zone, centreUtm.easting, centreUtm.northing)} \u00b7 ${interval} m`
+                    : `UTM ${zone}${bandFor(center[1])} \u00b7 ${interval} m`;
 
                 // Margin furniture. The declination model is consulted per sheet
                 // rather than per service start, so a long-running container does
@@ -256,9 +270,7 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                         scale,
                         generated: new Date().toISOString(),
                         dpi: resolution.dpi,
-                        gridZone: grid
-                            ? `UTM ${zone}${bandFor(center[1])} \u00b7 ${interval} m`
-                            : undefined,
+                        gridZone: grid ? gridLabel : undefined,
                         agency: body.furniture?.branding,
                         warnings: result.warnings,
                     },

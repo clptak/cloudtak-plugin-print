@@ -54,8 +54,8 @@ thing that would say so.
 
 The panel does not carry its own copy of the margins or the scale list. `GET
 /print-api` publishes `margins`, `gridGutter` and a `scales` table pairing each scale
-with the UTM grid interval it prints, and the panel computes the footprint from
-those. A duplicated margin constant is exactly how a box on screen silently stops
+with the UTM grid interval it prints, plus the whole `usngLadder` for the USNG
+grid, and the panel computes the footprint and grid readout from those. A duplicated margin constant is exactly how a box on screen silently stops
 matching the sheet.
 
 ## Pointing the panel at the print service
