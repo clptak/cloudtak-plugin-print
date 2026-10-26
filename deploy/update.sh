@@ -3,7 +3,7 @@
 # Update a cloudtak-plugin-print deployment.
 #
 # Pulls the repository, installs the plugin into CloudTAK's web tree, and rebuilds
-# only what actually changed -- the cloudtak-api image takes minutes and carries
+# only what actually changed -- the CloudTAK API image takes minutes and carries
 # the whole CloudTAK web build, so rebuilding it for a service-only change is
 # several minutes of downtime for nothing.
 #
@@ -19,6 +19,10 @@
 #
 # Override with STACK_DIR and CLOUDTAK_DIR if yours differs. Set PRINT_HOST to
 # have the public route checked through Caddy at the end.
+#
+# The CloudTAK API service to rebuild is PRINT_API_SERVICE -- the same variable
+# the cloudtak-print block's depends_on uses, resolved the same way Compose
+# does: the shell environment, then the stack .env, then the default "api".
 
 set -euo pipefail
 
@@ -29,7 +33,7 @@ for arg in "$@"; do
     case "$arg" in
         --force) FORCE=1 ;;
         --check) CHECK_ONLY=1 ;;
-        -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -49,8 +53,24 @@ PLUGIN_DEST="$CLOUDTAK_DIR/app/plugins/print"
 [ -d "$CLOUDTAK_DIR/app" ]             || die "no CloudTAK web tree at $CLOUDTAK_DIR/app -- needs CloudTAK 13.102 or newer (or set CLOUDTAK_DIR)"
 [ -d "$PLUGIN_SRC" ]                   || die "no plugin/ directory in $REPO_DIR"
 
+# ---- which service is the CloudTAK API -------------------------------------
+# Mirror depends_on: ${PRINT_API_SERVICE:-api}. The .env is read, never sourced.
+env_value() {
+    [ -f "$STACK_DIR/.env" ] || return 0
+    { grep -E "^[[:space:]]*$1[[:space:]]*=" "$STACK_DIR/.env" || true; } | tail -n 1 \
+        | sed -E "s/^[^=]*=[[:space:]]*//; s/[[:space:]]+(#.*)?$//; s/\r$//; s/^['\"](.*)['\"]$/\1/"
+}
+
+API_SERVICE="${PRINT_API_SERVICE:-$(env_value PRINT_API_SERVICE)}"
+API_SERVICE="${API_SERVICE:-api}"
+
+SERVICES="$(cd "$STACK_DIR" && docker compose config --services)" \
+    || die "docker compose config failed in $STACK_DIR -- fix the compose file first"
+printf '%s\n' "$SERVICES" | grep -qxF "$API_SERVICE" \
+    || die "no service '$API_SERVICE' in $STACK_DIR/docker-compose.yml -- set PRINT_API_SERVICE in $STACK_DIR/.env to the CloudTAK API service name"
+
 say "Paths"
-printf '   stack     %s\n   cloudtak  %s\n   repo      %s\n' "$STACK_DIR" "$CLOUDTAK_DIR" "$REPO_DIR"
+printf '   stack     %s\n   cloudtak  %s\n   repo      %s\n   api       %s\n' "$STACK_DIR" "$CLOUDTAK_DIR" "$REPO_DIR" "$API_SERVICE"
 
 # ---- the configuration trap ------------------------------------------------
 # PRINT_LAYOUT_DPI=96 makes markScale exactly 1. Before the put() fix that got the
@@ -131,11 +151,11 @@ cd "$STACK_DIR"
 
 TARGETS=()
 [ "$BUILD_SERVICE" -eq 1 ] && TARGETS+=(cloudtak-print)
-[ "$BUILD_PLUGIN"  -eq 1 ] && TARGETS+=(cloudtak-api)
+[ "$BUILD_PLUGIN"  -eq 1 ] && TARGETS+=("$API_SERVICE")
 
 say "Building: ${TARGETS[*]}"
 if [ "$BUILD_PLUGIN" -eq 1 ]; then
-    echo "   cloudtak-api rebuilds the whole CloudTAK web app; this takes a few minutes."
+    echo "   $API_SERVICE rebuilds the whole CloudTAK web app; this takes a few minutes."
 fi
 
 docker compose build "${TARGETS[@]}"

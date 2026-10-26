@@ -179,6 +179,7 @@ Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what ch
 | `--force` | rebuild both regardless |
 | `--check` | report how far behind you are, change nothing |
 | `STACK_DIR`, `CLOUDTAK_DIR` | override the assumed layout |
+| `PRINT_API_SERVICE` | the CloudTAK API service to rebuild — the same variable `depends_on` uses, read from the shell, then the stack `.env`, default `api` |
 | `PRINT_HOST` | also check the public route through Caddy afterwards |
 
 It refuses to run with uncommitted changes in the repository, refuses if the paths do not look like a stack, and refuses to delete a plugin destination that is not a `.../app/plugins/print` path. It also warns if `PRINT_LAYOUT_DPI` is set to 96 anywhere, which lays the map out at 96 DPI and enlarges it — soft contours and
