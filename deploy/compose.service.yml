@@ -34,9 +34,9 @@
     # PRINT_STORE_SERVICE in that stack's .env. TAK Portal leaves these lines
     # in place, and Compose interpolates them from the stack .env.
     depends_on:
-      - ${PRINT_API_SERVICE:-cloudtak-api}
-      - ${PRINT_TILES_SERVICE:-cloudtak-tiles}
-      - ${PRINT_STORE_SERVICE:-cloudtak-store}
+      - ${PRINT_API_SERVICE:-api}
+      - ${PRINT_TILES_SERVICE:-tiles}
+      - ${PRINT_STORE_SERVICE:-store}
     expose:
       - "5010"
     # Docker's 64MB /dev/shm default crashes Chromium on large canvases.
