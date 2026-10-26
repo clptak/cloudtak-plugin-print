@@ -92,14 +92,22 @@ Paste the `cloudtak-print` block from `deploy/compose.service.yml` into the `ser
 
 Copy `service/.env.example` for the variable list. Only `SigningSecret` is strictly required — the same value the other CloudTAK services already use, which is how the service verifies CloudTAK's own JWTs.
 
-The shipped service block calls the API at `http://api:5000` and tiles at `http://tiles:5002`, and waits for services `api`, `tiles`, and `store`. That matches upstream CloudTAK. A stack that names those containers `cloudtak-api`, `cloudtak-tiles`, and `cloudtak-store` sets this in the stack `.env`:
+The shipped service block waits for `cloudtak-api`, `cloudtak-tiles`, and `cloudtak-store`, and calls the API at `http://api:5000` and tiles at `http://tiles:5002`. Compose reads `PRINT_*` from the stack `.env` while interpolating the file. Putting `API_INTERNAL_URL` in `.env` alone does nothing: the service's `environment:` list wins over `env_file:`.
+
+This project's stack sets the internal URLs:
 
 ```sh
 PRINT_API_INTERNAL_URL=http://cloudtak-api:5000
 PRINT_TILES_INTERNAL_URL=http://cloudtak-tiles:5002
 ```
 
-and changes the three `depends_on` entries in the pasted block to those service names. Compose reads `PRINT_*` while interpolating the file. Putting `API_INTERNAL_URL` in `.env` alone does nothing: the service's `environment:` list wins over `env_file:`.
+A stock CloudTAK compose file, whose services are `api`, `tiles`, and `store`, sets the service names instead and leaves the URLs unset:
+
+```sh
+PRINT_API_SERVICE=api
+PRINT_TILES_SERVICE=tiles
+PRINT_STORE_SERVICE=store
+```
 
 ```sh
 docker compose build cloudtak-print
@@ -162,7 +170,7 @@ docker compose build \
 
 Pulls, installs the plugin into CloudTAK's web tree, and rebuilds **only what changed**. That distinction matters: `cloudtak-print` builds in seconds, while `cloudtak-api` rebuilds the entire CloudTAK web application and takes minutes of downtime — so a service-only change should never trigger it, and a docs-only change should rebuild nothing at all.
 
-`update.sh` pulls this repository and rebuilds images. It does not edit the `cloudtak-print` block already pasted into the stack `docker-compose.yml`. After pulling a change to `deploy/compose.service.yml`, re-paste that block (or edit the live one to match) and recreate the container. On this renamed stack the `.env` must contain `PRINT_API_INTERNAL_URL=http://cloudtak-api:5000` and `PRINT_TILES_INTERNAL_URL=http://cloudtak-tiles:5002`, and `depends_on` must stay `cloudtak-api`, `cloudtak-tiles`, `cloudtak-store`. Check the resolved file with `docker compose config` and, from inside the print container, `getent hosts` on the host in `API_INTERNAL_URL`. A marketplace install does not need those variables: TAK Portal composes the overlay from the stack directory, so an unset `PRINT_*` becomes `http://api:5000` and `http://tiles:5002`, and the literal `depends_on` names are ones Portal already keeps.
+`update.sh` pulls this repository and rebuilds images. It does not edit the `cloudtak-print` block already pasted into the stack `docker-compose.yml`. After pulling a change to `deploy/compose.service.yml`, re-paste that block (or edit the live one to match) and recreate the container. On this stack the `.env` must contain `PRINT_API_INTERNAL_URL=http://cloudtak-api:5000` and `PRINT_TILES_INTERNAL_URL=http://cloudtak-tiles:5002`. `depends_on` defaults to `cloudtak-api`, `cloudtak-tiles`, and `cloudtak-store`; a stock compose file sets `PRINT_API_SERVICE=api`, `PRINT_TILES_SERVICE=tiles`, and `PRINT_STORE_SERVICE=store`. Check the resolved file with `docker compose config` and, from inside the print container, `getent hosts` on the API hostname. A marketplace install on stock CloudTAK sets those three service variables (or the URLs stay `http://api:5000` and `http://tiles:5002` when `PRINT_API_INTERNAL_URL` and `PRINT_TILES_INTERNAL_URL` are unset). TAK Portal leaves the `depends_on` lines in place for Compose to interpolate.
 
 | | |
 |---|---|
