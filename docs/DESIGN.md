@@ -348,7 +348,7 @@ If the drawn area in fit-to-area mode does not fit one sheet, v1 shows the overf
       context: ${HOME_DIRECTORY_PATH}/tak-stack/cloudtak-plugin-print/service
       dockerfile: Dockerfile
     restart: unless-stopped
-    depends_on: [cloudtak-api, cloudtak-tiles, cloudtak-store]
+    depends_on: [api, tiles, store]
     expose:
       - "5010"
     shm_size: '1gb'
@@ -360,7 +360,8 @@ If the drawn area in fit-to-area mode does not fit one sheet, v1 shows the overf
       - AWS_S3_Endpoint=${AWS_S3_Endpoint}
       - AWS_S3_AccessKeyId=${AWS_S3_AccessKeyId}
       - AWS_S3_SecretAccessKey=${AWS_S3_SecretAccessKey}
-      - TILES_INTERNAL_URL=http://cloudtak-tiles:5002
+      - API_INTERNAL_URL=${PRINT_API_INTERNAL_URL:-http://api:5000}
+      - TILES_INTERNAL_URL=${PRINT_TILES_INTERNAL_URL:-http://tiles:5002}
       - PRINT_CONCURRENCY=${PRINT_CONCURRENCY:-1}
       - PRINT_MAX_DPI=${PRINT_MAX_DPI:-200}
     deploy:
@@ -377,6 +378,7 @@ Notes:
 - **`shm_size: 1gb`** — Docker's 64 MB `/dev/shm` default crashes Chromium on large canvases.
 - **`PRINT_CONCURRENCY` defaults to 1** — the box's CPU limits already sum to roughly 19 and it carries live traffic. Raise it after measuring, or after TAK Server moves off this host.
 - **`PRINT_MAX_DPI` defaults to 200.** Both knobs are env vars precisely because this box's resource budget is expected to change.
+- **Internal URLs default to `api:5000` and `tiles:5002`.** `PRINT_API_INTERNAL_URL` and `PRINT_TILES_INTERNAL_URL` in the stack `.env` override them. `depends_on` is the literal service names `api`, `tiles`, and `store`; a renamed stack edits those three names in the pasted block. `${VAR:-api}` is not used there, because TAK Portal's depends_on rewriter drops any entry containing `:`.
 
 ### Caddy
 
