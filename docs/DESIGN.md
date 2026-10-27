@@ -258,30 +258,32 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 | UTM grid + edge labels | Yes | See section 6 |
 | Title block | Yes | Map name, incident number, date/time, scale, datum, grid zone, author |
 | Agency branding | Yes | Logo + incident number |
-| Legend | Optional | User toggle; resizes the map frame |
+| Legend | Optional | User toggle, off by default; inset box in a map corner (see Legend below) |
 
 **Declination** is computed offline from the World Magnetic Model (`geomagnetism` npm package), not fetched from NOAA — the container should not need egress. Note the model epoch: WMM2025 is valid through 2030 and the package must be refreshed before then.
 
 **Legend** has a hidden dependency: it needs CloudTAK's sprite sheet and the CoT type-to-icon mapping, pulled from `cloudtak-api`. This is the main reason it is a toggle rather than always-on.
 
-### Legend — IN DESIGN
+### Legend — DESIGNED, NOT BUILT
 
-**Status: not built.** `furniture.legend` is accepted by the request schema and ignored; the panel has no control for it. Nothing here is decided until it moves from Open to Decided below. Answers are recorded as they are given (interview started 2026-10-27).
+**Status: designed 2026-10-27, not built.** `furniture.legend` is accepted by the request schema and ignored; the panel has no control for it.
 
 The dependency note above is partly out of date: the job already carries the icons harvested from the live map (`images`), so the service needs no call to `cloudtak-api` for them. What the payload lacks is a human-readable name for each entry.
 
 **Decided**
 
-- (none yet)
+- **Content: markers only** (2026-10-27). One entry per distinct marker icon on the sheet, with its name. No overlay-layer entries and no line or polygon styles. The icons are already in the job's `images`.
+- **Scope: only markers actually printed** (2026-10-27). The service asks the rendered map which symbols it placed inside the frame, after settle, so icons outside the frame or hidden by label collision are left out. The legend describes the paper exactly.
+- **Labels: automatic, plus saved renames** (2026-10-27). The service names each entry from its icon: the iconset file name (`SAR/Clue.png` → "Clue") or the CoT type description. The panel keeps a short rename table (icon → name), saved per browser and sent with the job, applied whenever that icon prints. This fits the scope decision: the final list is only known after rendering, so names are keyed by icon rather than chosen per sheet.
+- **Placement: inset box in the map** (2026-10-27). A white box with a thin border in a corner of the map frame, sized to its entries. Ground coverage is unchanged; the box hides what lies beneath it. This replaces the earlier "resizes the map frame" note in the furniture table.
+- **Corner: automatic, with override** (2026-10-27). The service picks the corner covering the fewest printed markers. The panel offers Auto / NW / NE / SW / SE, default Auto, for when it covers something that matters but is not a marker.
+- **Overflow: cap, then "+N more"** (2026-10-27). Entries are listed most frequent first up to a cap, and the remainder is summarised as a final "+N more" line. The box never grows past the cap.
+- **Cap: 8 entries** (2026-10-27), on every paper size. At roughly 5 mm icons and 7 pt text (about 6 mm per entry) the box stays under about 5 cm tall.
+- **Default: off, remembered** (2026-10-27). Off for a new user; the panel then remembers the last choice per browser, as it does for marker size. The legend is opt-in.
 
 **Open**
 
-1. Content — what the legend lists: CoT markers, overlay layers, line and polygon styles, or a mix.
-2. Scope — everything loaded, or only what falls inside the printed frame.
-3. Labels — where each entry's name comes from.
-4. Placement — where it sits on the sheet and what it costs the map.
-5. Overflow — what happens when there are more entries than fit.
-6. Default — on or off, and whether it is remembered.
+- (none)
 
 ---
 
