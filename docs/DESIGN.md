@@ -264,6 +264,25 @@ sheet and state it in the margin (`UTM Zone 12N (extended)`). The zone is chosen
 
 **Legend** has a hidden dependency: it needs CloudTAK's sprite sheet and the CoT type-to-icon mapping, pulled from `cloudtak-api`. This is the main reason it is a toggle rather than always-on.
 
+### Legend — IN DESIGN
+
+**Status: not built.** `furniture.legend` is accepted by the request schema and ignored; the panel has no control for it. Nothing here is decided until it moves from Open to Decided below. Answers are recorded as they are given (interview started 2026-10-27).
+
+The dependency note above is partly out of date: the job already carries the icons harvested from the live map (`images`), so the service needs no call to `cloudtak-api` for them. What the payload lacks is a human-readable name for each entry.
+
+**Decided**
+
+- (none yet)
+
+**Open**
+
+1. Content — what the legend lists: CoT markers, overlay layers, line and polygon styles, or a mix.
+2. Scope — everything loaded, or only what falls inside the printed frame.
+3. Labels — where each entry's name comes from.
+4. Placement — where it sits on the sheet and what it costs the map.
+5. Overflow — what happens when there are more entries than fit.
+6. Default — on or off, and whether it is remembered.
+
 ---
 
 ### Marker and label size
