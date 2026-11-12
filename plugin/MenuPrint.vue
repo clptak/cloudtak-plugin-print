@@ -145,7 +145,6 @@
                         v-model='markLabel'
                         label='Marker &amp; Label Size'
                         :options='markChoices'
-                        :columns='5'
                     />
                 </div>
 
@@ -161,11 +160,10 @@
                     v-if='missionOptions.length > 1'
                     class='my-2'
                 >
-                    <ButtonChoice
+                    <TablerEnum
                         v-model='missionLabel'
                         label='Data Sync Invite QR'
                         :options='missionOptions'
-                        :columns='1'
                     />
                 </div>
 
