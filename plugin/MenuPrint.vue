@@ -46,7 +46,7 @@
                 </div>
 
                 <div class='my-2'>
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='orientationLabel'
                         label='Orientation'
                         :options='["Portrait", "Landscape"]'
@@ -106,7 +106,7 @@
                 </div>
 
                 <div class='my-2'>
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='gridChoice'
                         label='Grid'
                         :options='GRID_OPTIONS'
@@ -114,7 +114,7 @@
                 </div>
 
                 <div class='my-2'>
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='outputLabel'
                         label='Output'
                         :options='OUTPUTS.map(([label]) => label)'
@@ -141,18 +141,19 @@
                 </div>
 
                 <div class='my-2'>
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='markLabel'
                         label='Marker &amp; Label Size'
-                        :options='markOptions'
+                        :options='markChoices'
+                        :columns='5'
                     />
                 </div>
 
                 <div class='my-2'>
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='qualityLabel'
                         label='Quality'
-                        :options='qualityOptions'
+                        :options='qualityChoices'
                     />
                 </div>
 
@@ -160,10 +161,11 @@
                     v-if='missionOptions.length > 1'
                     class='my-2'
                 >
-                    <TablerEnum
+                    <ButtonChoice
                         v-model='missionLabel'
                         label='Data Sync Invite QR'
                         :options='missionOptions'
+                        :columns='1'
                     />
                 </div>
 
@@ -328,6 +330,7 @@ import { missions, inviteQr, attach } from './lib/missions.ts';
 import { sendable } from './lib/datasync.ts';
 import type { MissionOption } from './lib/missions.ts';
 import { SheetBox } from './lib/sheetbox.ts';
+import ButtonChoice from './ButtonChoice.vue';
 import { OUTPUTS, formatFor, outputName } from './lib/output.ts';
 import { sendToImports } from './lib/imports.ts';
 import { useRouter } from 'vue-router';
@@ -463,6 +466,14 @@ const qualityOptions = computed(() => {
         });
 });
 
+// "Standard — 200 DPI" as two lines on a button, name over resolution.
+const qualityChoices = computed(() => {
+    return qualityOptions.value.map((label) => {
+        const [text, sub] = label.split(' — ');
+        return { value: label, text, sub };
+    });
+});
+
 const missionOptions = computed(() => {
     return [NO_MISSION, ...missionList.value.map((entry) => entry.name)];
 });
@@ -486,6 +497,12 @@ const sendMission = computed(() => {
 });
 
 const markOptions = MARK_SIZES.map(([label]) => label);
+
+// The buttons show the percentage only; the stored value stays the full label so
+// a size remembered by an earlier version of the panel still matches.
+const markChoices = MARK_SIZES.map(([label, size]) => {
+    return { value: label, text: `${Math.round(size * 100)}%` };
+});
 
 const markSize = computed(() => {
     const match = MARK_SIZES.find(([label]) => label === markLabel.value);
