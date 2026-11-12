@@ -272,7 +272,50 @@ this; `gdalinfo --formats | grep PDF` should report `PDF -raster,vector- (rw+vs)
 
 ---
 
-## 8. Still open
+## 8. The GeoTIFF alternative
+
+`format: 'tif'` returns the map frame alone as a Cloud-Optimized GeoTIFF in
+EPSG:3857 (`lib/geotiff.ts`). The plugin offers it as **GeoTIFF Overlay** in the
+Output menu.
+
+It sidesteps most of this document:
+
+- **No collar.** There is no page around the map, so section 4 does not apply
+  and `GDAL_PDF_BANDS=4` is not needed.
+- **No PDF driver.** CloudTAK's importer reads a GeoTIFF with any GDAL build,
+  which removes the first open item below.
+- **No GEOGCS compromise.** Section 2a forced the GeoPDF to declare WGS 84 for
+  Acrobat's sake, at the cost of a small bow. A GeoTIFF declares EPSG:3857
+  directly, and its affine transform is exact, because MapLibre's raster already
+  is a Mercator grid.
+
+**The extent comes from the view, not the paper.** It is computed from the
+centre, zoom and CSS size the renderer was given. That is the same arithmetic as
+`projector` in `lib/grid.ts`. The size is rounded first because the map page's
+viewport is whole pixels: a 1387.5px frame is drawn 1388px tall, and declaring
+1387.5 makes the pixels 0.04% out of square. `test/geotiff.test.ts` holds this
+extent to `frameCorners` to within a centimetre.
+
+**The grid is drawn into the raster.** A GeoTIFF has nowhere to keep vector line
+work, so `burnGrid` puts the sheet-wide grid SVG over the map in Chromium at the
+render's own resolution, clipped to the frame. Lines and in-frame labels stay;
+margin labels go. Measured on a 1:24,000 Letter frame at 150 DPI (5 m pixels),
+`gdaltransform` puts every burned UTM line within 1 m of its round 1000 m
+easting. If the burn fails, the job returns the map without a grid and adds a
+warning.
+
+**The file is written by `gdal_translate`**: COG, DEFLATE with predictor,
+512px tiles, automatic overviews. That needs `gdal-bin` in the service image
+(the Dockerfile installs it; Bookworm has GDAL 3.6, and COG needs 3.1).
+`PRINT_GDAL_TRANSLATE` points at the binary where it is not on PATH.
+
+```sh
+gdalinfo map.tif | grep -E 'Size is|Pixel Size|EPSG",3857|LAYOUT'
+```
+
+---
+
+## 9. Still open
 
 - Confirm the PDF driver is present in the CloudTAK events image
   (`ghcr.io/osgeo/gdal:alpine-normal-3.13.1`). The transform assumes it.

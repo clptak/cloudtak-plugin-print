@@ -26,6 +26,8 @@ Or bake it in at image build time with the `WEB_PLUGINS` build arg on `cloudtak-
 | `lib/sheetbox.ts` | Draws and drags the sheet box on the map |
 | `lib/geometry.ts` | The box's maths, kept pure so it can be tested |
 | `lib/missions.ts` | Data Sync list and invite-QR fetch |
+| `lib/output.ts` | Output formats and file naming, kept pure so it can be tested |
+| `lib/imports.ts` | Upload a finished job to the user's CloudTAK Imports |
 
 ## Two things worth knowing before changing this
 
@@ -150,3 +152,18 @@ everything ever attached to it.
 **Management Data Syncs are not offered.** `lib/datasync.ts` drops any whose
 name contains `MGMT`, case-insensitive. A sync spelled `Management` does not
 match — see `service/test/parity/missions.test.ts`, which pins that.
+
+## Sending a map to Imports
+
+`Send to Imports` renders at full quality and uploads the result with
+`PUT /api/import` (multipart), the route CloudTAK's own upload dialog uses. The
+server creates the import, and the events worker converts a `.tif` or a
+georeferenced `.pdf` into an overlay with no CloudTAK change. The panel then
+links to the import in the Imports menu.
+
+It sends whatever the **Output** menu says. The GeoTIFF is the better overlay:
+it is the map frame only, so there is no collar. The button is hidden for a PDF
+with GeoPDF turned off, which the importer would refuse.
+
+An import is the user's own until they share it, so this is offered to everyone.
+It is still a button, never a side effect of Print.

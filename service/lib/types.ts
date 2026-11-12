@@ -43,10 +43,13 @@ export const PrintRequest = Type.Object({
     probe: Type.Optional(Type.Boolean()),
 
     /**
-     * 'pdf' is the deliverable; 'png' returns the bare map raster and exists for
-     * debugging the render without the page layout in the way.
+     * 'pdf' is the printed sheet. 'tif' is the map frame alone as a
+     * Cloud-Optimized GeoTIFF in EPSG:3857, grid burned in, for importing as an
+     * overlay -- no collar, unlike the GeoPDF; see lib/geotiff.ts. 'png' returns
+     * the bare map raster and exists for debugging the render without the page
+     * layout in the way. `georeference` applies to 'pdf' only.
      */
-    format: Type.Optional(Type.Union([Type.Literal('pdf'), Type.Literal('png')])),
+    format: Type.Optional(Type.Union([Type.Literal('pdf'), Type.Literal('png'), Type.Literal('tif')])),
 
     /** MapLibre style document, exactly as the client currently has it. */
     style: Type.Optional(Type.Record(Type.String(), Type.Unknown())),

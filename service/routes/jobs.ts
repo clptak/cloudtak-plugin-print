@@ -14,6 +14,7 @@ import { parseQr, qrInches, qrSvg } from '../lib/qr.js';
 import { renderMap } from '../lib/render.js';
 import { composeSheet } from '../lib/sheet.js';
 import { georeference } from '../lib/georef.js';
+import { viewExtent, toGeoTiff, burnGrid } from '../lib/geotiff.js';
 import { smokeRender } from '../lib/browser.js';
 import type { Queue, JobRecord } from '../lib/queue.js';
 
@@ -118,6 +119,20 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
 
                     if (format === 'png') return { body: pattern, contentType: 'image/png' };
 
+                    // Exercises the whole GeoTIFF path -- GDAL, georeferencing --
+                    // without a style, so a deployment can check it in isolation.
+                    if (format === 'tif') {
+                        return {
+                            body: await toGeoTiff(pattern, viewExtent({
+                                center,
+                                zoom,
+                                width: Math.round(resolution.css.width),
+                                height: Math.round(resolution.css.height),
+                            }), { title: body.title }),
+                            contentType: 'image/tiff',
+                        };
+                    }
+
                     return {
                         body: await composeSheet({
                             map: pattern,
@@ -175,8 +190,6 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                     return { body: result.png, contentType: 'image/png', warnings: result.warnings };
                 }
 
-                ctx.progress(0.85, 'composing sheet');
-
                 // The grid is drawn over the map rather than into it, so it stays
                 // vector in the PDF. Zone comes from the sheet centre and is held
                 // across the whole page — a sheet crossing a zone boundary gets one
@@ -206,6 +219,56 @@ export default async function router(schema: Schema, cfg: { queue: Queue }) {
                             system,
                         })
                     : undefined;
+
+                // The map frame alone, as an EPSG:3857 GeoTIFF. No collar, no title
+                // strip: the overlay's position on the map is its legend. The grid
+                // is burned in because a raster has nowhere else to put it.
+                if (format === 'tif') {
+                    ctx.progress(0.85, 'writing GeoTIFF');
+
+                    // Rounded because the map page is: its viewport is whole CSS
+                    // pixels and #map fills it, so a 1387.5px frame is drawn 1388px
+                    // tall. The extent has to describe what was drawn.
+                    const view = {
+                        center,
+                        zoom,
+                        width: Math.round(resolution.css.width),
+                        height: Math.round(resolution.css.height),
+                    };
+
+                    let raster = result.png;
+
+                    if (grid) {
+                        try {
+                            raster = await burnGrid({
+                                png: result.png,
+                                grid: grid.svg,
+                                width: view.width,
+                                height: view.height,
+                                scale: resolution.deviceScale,
+                                offset: {
+                                    x: MARGINS.left * resolution.layoutDpi,
+                                    y: MARGINS.top * resolution.layoutDpi,
+                                },
+                            });
+                        } catch (err) {
+                            result.warnings.push(
+                                'grid could not be drawn into the GeoTIFF and was left off: '
+                                + (err instanceof Error ? err.message : String(err)),
+                            );
+                        }
+                    }
+
+                    const tif = await toGeoTiff(raster, viewExtent(view), {
+                        title: body.title,
+                        timeoutMs: c.renderTimeoutMs,
+                    });
+
+                    ctx.progress(1, 'complete');
+                    return { body: tif, contentType: 'image/tiff', warnings: result.warnings };
+                }
+
+                ctx.progress(0.85, 'composing sheet');
 
                 // The title strip names the grid zone and, for USNG, the 100 km
                 // square at the sheet centre. Where the sheet spans more than one

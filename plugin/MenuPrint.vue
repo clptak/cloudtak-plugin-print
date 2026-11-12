@@ -114,6 +114,23 @@
                 </div>
 
                 <div class='my-2'>
+                    <TablerEnum
+                        v-model='outputLabel'
+                        label='Output'
+                        :options='OUTPUTS.map(([label]) => label)'
+                    />
+                    <div
+                        v-if='format === "tif"'
+                        class='subheader mt-1'
+                    >
+                        The map frame alone as a GeoTIFF, grid drawn in, for loading as an overlay in CloudTAK, ATAK or desktop GIS. No margins or title block.
+                    </div>
+                </div>
+
+                <div
+                    v-if='format === "pdf"'
+                    class='my-2'
+                >
                     <TablerToggle
                         v-model='geopdf'
                         label='GeoPDF'
@@ -177,6 +194,26 @@
                     </div>
                 </div>
 
+                <!--
+                    Imports are the user's own until shared, so this is safe to
+                    offer to everyone -- but it is still a button, never a side
+                    effect of Print. Full quality, unlike Send Preview: an overlay
+                    is looked at zoomed in, which is where a preview falls apart.
+                -->
+                <div
+                    v-if='importable'
+                    class='my-2 d-flex align-items-center'
+                >
+                    <span class='subheader'>Load as an overlay in CloudTAK</span>
+                    <TablerButton
+                        class='btn-sm ms-auto'
+                        :disabled='busy || sending'
+                        @click='sendImport'
+                    >
+                        {{ sending ? 'Sending…' : 'Send to Imports' }}
+                    </TablerButton>
+                </div>
+
                 <TablerInlineAlert
                     v-if='sendError'
                     severity='danger'
@@ -186,9 +223,15 @@
 
                 <div
                     v-if='sendNote'
-                    class='subheader my-2'
-                    v-text='sendNote'
-                />
+                    class='subheader my-2 d-flex align-items-center'
+                >
+                    <span v-text='sendNote' />
+                    <a
+                        v-if='importId'
+                        class='ms-auto cursor-pointer'
+                        @click='router.push(`/menu/imports/${importId}`)'
+                    >Open Import</a>
+                </div>
 
                 <!--
                     An overlay the service cannot resolve is dropped silently on its
@@ -286,6 +329,9 @@ import { missions, inviteQr, attach } from './lib/missions.ts';
 import { sendable } from './lib/datasync.ts';
 import type { MissionOption } from './lib/missions.ts';
 import { SheetBox } from './lib/sheetbox.ts';
+import { OUTPUTS, formatFor, outputName } from './lib/output.ts';
+import { sendToImports } from './lib/imports.ts';
+import { useRouter } from 'vue-router';
 
 const CUSTOM = 'Custom…';
 const NO_MISSION = 'None';
@@ -349,6 +395,22 @@ const grid = computed(() => {
 // The toggle exists because it is not free everywhere: it adds a viewport
 // dictionary some third-party PDF tooling has opinions about.
 const geopdf = ref(true);
+
+// PDF by default: printing is what this panel is for. Not remembered, like the
+// GeoPDF toggle -- a GeoTIFF left selected from last time is a sheet that does
+// not come out of the printer.
+const outputLabel = ref(OUTPUTS[0][0]);
+const format = computed(() => {
+    return formatFor(outputLabel.value);
+});
+
+// A PDF imports only when it carries its georeferencing.
+const importable = computed(() => {
+    return format.value === 'tif' || geopdf.value;
+});
+
+const router = useRouter();
+const importId = ref('');
 
 const title = ref('');
 const incident = ref('');
@@ -568,11 +630,7 @@ function fitToSheet() {
  * not seconds: it is there to disambiguate, not to be read.
  */
 function sheetName(suffix = ''): string {
-    const stem = title.value.trim()
-        ? title.value.replace(/[^\w-]+/g, '-').toLowerCase().replace(/^-+|-+$/g, '')
-        : 'map';
-
-    return `${stem}-${scale.value}${suffix}.pdf`;
+    return outputName(title.value, scale.value, format.value, suffix);
 }
 
 function stamp(): string {
@@ -620,6 +678,7 @@ async function compose(preview: boolean): Promise<PrintRequest> {
         style: captured.style,
         images: captured.images,
         qr,
+        format: format.value,
         georeference: geopdf.value,
         furniture: {
             grid: gridChoice.value === GRID_MGRS_USNG ? 'usng' : gridChoice.value === 'UTM' ? 'utm' : 'none',
@@ -645,6 +704,7 @@ async function send() {
     sending.value = true;
     sendError.value = undefined;
     sendNote.value = '';
+    importId.value = '';
     job.value = undefined;
 
     try {
@@ -667,6 +727,47 @@ async function send() {
         await attach(target.guid, await result(submitted.job), name);
 
         sendNote.value = `Sent ${name} to ${target.name}`;
+    } catch (err) {
+        sendError.value = err instanceof Error ? err : new Error(String(err));
+    } finally {
+        sending.value = false;
+    }
+}
+
+/**
+ * Render at full quality and send the result to the user's own Imports, where
+ * CloudTAK turns it into an overlay.
+ *
+ * Whatever the Output menu says: a GeoTIFF arrives as the map frame alone, a
+ * GeoPDF with its collar. The button is hidden for a PDF without georeferencing,
+ * which CloudTAK would refuse.
+ */
+async function sendImport() {
+    sending.value = true;
+    sendError.value = undefined;
+    sendNote.value = '';
+    importId.value = '';
+    job.value = undefined;
+
+    try {
+        const submitted = await submit(await compose(false));
+
+        job.value = submitted;
+
+        const finished = await wait(submitted.job, {
+            onUpdate: (update) => {
+                job.value = update;
+            },
+        });
+
+        if (finished.status === 'failed') {
+            throw new Error(finished.error || 'Print job failed');
+        }
+
+        const name = sheetName(`-${stamp()}`);
+
+        importId.value = await sendToImports(await result(submitted.job), name);
+        sendNote.value = `Sent ${name} to Imports`;
     } catch (err) {
         sendError.value = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -700,7 +801,7 @@ async function run(preview: boolean) {
         const href = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = href;
-        anchor.download = preview ? name.replace(/\.pdf$/, '-preview.pdf') : name;
+        anchor.download = preview ? sheetName('-preview') : name;
         anchor.click();
         URL.revokeObjectURL(href);
     } catch (err) {

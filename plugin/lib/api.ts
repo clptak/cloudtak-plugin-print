@@ -84,7 +84,8 @@ export type PrintRequest = {
     dpi?: number;
     /** Multiplier on marker and label size; 1 is their on-screen size. */
     markSize?: number;
-    format?: 'pdf' | 'png';
+    /** 'tif' is the map frame alone as a GeoTIFF; see service/lib/geotiff.ts. */
+    format?: 'pdf' | 'png' | 'tif';
     style?: Record<string, unknown>;
     images?: unknown[];
     qr?: { svg: string; label?: string };

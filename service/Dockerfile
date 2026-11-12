@@ -32,14 +32,18 @@ RUN npm install --include=dev
 
 # Fonts are for the phase-3 page layout, not the map: MapLibre renders map labels
 # from SDF glyph tiles, so system fonts do not affect the map itself.
+#
+# gdal-bin is for format 'tif': gdal_translate writes the map frame as a
+# Cloud-Optimized GeoTIFF (lib/geotiff.ts). Bookworm ships GDAL 3.6, and the COG
+# driver needs 3.1 or later. PDF output does not use it.
 RUN set -eux; \
     if [ "$CHROMIUM_SOURCE" = "distro" ]; then \
         apt-get update; \
-        apt-get install -y --no-install-recommends chromium fonts-dejavu-core fonts-liberation; \
+        apt-get install -y --no-install-recommends chromium fonts-dejavu-core fonts-liberation gdal-bin; \
     else \
         npx playwright install --with-deps chromium; \
         apt-get update; \
-        apt-get install -y --no-install-recommends fonts-dejavu-core fonts-liberation; \
+        apt-get install -y --no-install-recommends fonts-dejavu-core fonts-liberation gdal-bin; \
     fi; \
     rm -rf /var/lib/apt/lists/*
 
