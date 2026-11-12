@@ -41,11 +41,15 @@ export async function missions(): Promise<MissionOption[]> {
 /**
  * Attach a file to a Data Sync.
  *
- * POSTs the bytes raw, exactly as CloudTAK's own Upload component does: the
- * route streams the request body straight to TAK Server and reads
- * `content-length` off it, so this must not be multipart and must not be a
- * stream. Content-Type comes from the Blob, again as the browser's own uploader
- * leaves it.
+ * Multipart, as CloudTAK's own Upload component sends it. Before CloudTAK
+ * 13.122 this route took the raw bytes and read `content-length` off the
+ * request; it now refuses anything but multipart/form-data with a 400. The
+ * server stages the part to disk and hands it to TAK Server, so the browser no
+ * longer has to send a known length.
+ *
+ * `name` still goes in the query string, where it overrides the multipart
+ * filename -- the same name either way, but the query is what the route reads
+ * first.
  *
  * No mission token is sent. The route falls back to the caller's own
  * subscription when the header is absent, and every mission in this list is one
@@ -55,10 +59,14 @@ export async function missions(): Promise<MissionOption[]> {
 export async function attach(guid: string, file: Blob, name: string): Promise<void> {
     const token = await getRuntimeToken();
 
+    const form = new FormData();
+    form.append('file', file, name);
+
     const res = await fetch(uploadUrl(String(serverUrl), guid, name), {
         method: 'POST',
+        // No Content-Type: the browser has to set it, boundary included.
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: file,
+        body: form,
     });
 
     if (!res.ok) {

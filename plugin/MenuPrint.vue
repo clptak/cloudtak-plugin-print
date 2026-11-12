@@ -189,7 +189,7 @@
                             :disabled='busy || sending || !sendMission'
                             @click='send'
                         >
-                            {{ sending ? 'Sending…' : 'Send Preview' }}
+                            {{ sending ? 'Sending…' : 'Send' }}
                         </TablerButton>
                     </div>
                 </div>
@@ -197,8 +197,7 @@
                 <!--
                     Imports are the user's own until shared, so this is safe to
                     offer to everyone -- but it is still a button, never a side
-                    effect of Print. Full quality, unlike Send Preview: an overlay
-                    is looked at zoomed in, which is where a preview falls apart.
+                    effect of Print. Same quality as Print, like Send.
                 -->
                 <div
                     v-if='importable'
@@ -688,14 +687,12 @@ async function compose(preview: boolean): Promise<PrintRequest> {
 }
 
 /**
- * Render at preview quality and attach the result to a Data Sync.
+ * Render and attach the result to a Data Sync.
  *
- * Preview quality deliberately. This is for "here is the area, any objections"
- * before committing to a full render, and it is pulled down over cellular by
- * whoever is subscribed: a preview is a few hundred kilobytes against several
- * megabytes for a 1:24,000 sheet. The filename says so, because the one thing
- * worse than a low-resolution map in a mission is a low-resolution map nobody
- * knows is low-resolution.
+ * At the quality and output the panel is set to, the same file Print would
+ * download. It used to go at preview quality to spare cellular subscribers, but
+ * a low-resolution map in a mission is one people end up working from; the
+ * Quality menu is where that trade-off is made, by whoever is sending.
  */
 async function send() {
     const target = sendMission.value;
@@ -708,7 +705,7 @@ async function send() {
     job.value = undefined;
 
     try {
-        const submitted = await submit(await compose(true));
+        const submitted = await submit(await compose(false));
 
         job.value = submitted;
 
@@ -722,7 +719,7 @@ async function send() {
             throw new Error(finished.error || 'Print job failed');
         }
 
-        const name = sheetName(`-${stamp()}-preview`);
+        const name = sheetName(`-${stamp()}`);
 
         await attach(target.guid, await result(submitted.job), name);
 

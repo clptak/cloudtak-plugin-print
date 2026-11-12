@@ -133,18 +133,18 @@ why. The plugin surfaces the same field in the panel.
 
 ## Sending a map to a Data Sync
 
-`Send Preview` renders at preview quality and attaches the result to the
-selected Data Sync, via `POST /api/marti/missions/{guid}/upload?name=...` —
-CloudTAK's own route, which uploads to TAK Server and attaches to the mission in
-one call. The bytes go up raw, exactly as CloudTAK's own Upload component sends
-them; no mission token is needed, because that route falls back to the caller's
+`Send` renders at the quality and output the panel is set to -- the same file
+Print would download -- and attaches it to the selected Data Sync, via
+`POST /api/marti/missions/{guid}/upload?name=...`, CloudTAK's own route, which
+uploads to TAK Server and attaches to the mission in one call. Since CloudTAK
+13.122 that route takes multipart/form-data only; raw bytes are refused with a
+400. No mission token is needed, because the route falls back to the caller's
 own subscription and `missions()` only ever lists subscriptions with write
 access.
 
-Preview quality on purpose: this is for agreeing an area before committing to a
-full render, and whoever is subscribed pulls it down over cellular. A preview is
-a few hundred kilobytes against several megabytes for a 1:24,000 sheet. The
-filename says `-preview` for the same reason.
+It used to send at preview quality, to spare whoever pulls it down over
+cellular. A low-resolution sheet in a mission is one people end up working
+from, so the Quality menu now decides it, as it does for Print.
 
 Neither Preview nor Print uploads anything on its own. A Data Sync keeps
 everything ever attached to it.

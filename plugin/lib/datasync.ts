@@ -27,9 +27,9 @@ export function sendable<T extends MissionTarget>(list: T[]): T[] {
 /**
  * The upload endpoint for one Data Sync.
  *
- * The `name` query parameter is not optional: CloudTAK's route reads it to name
- * the file on TAK Server, and omitting it fails schema validation rather than
- * defaulting to anything. The guid is escaped because the path is built by hand
+ * The `name` query parameter names the file on TAK Server. Since CloudTAK 13.122
+ * the multipart filename would do the same, but the query overrides it and is
+ * kept so the name is set in one place regardless. The guid is escaped because the path is built by hand
  * and a slash in one would silently retarget the request at another route.
  */
 export function uploadUrl(base: string, guid: string, name: string): string {
