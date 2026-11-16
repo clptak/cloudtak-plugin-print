@@ -107,14 +107,19 @@ AFTER="$(git rev-parse HEAD)"
 BUILD_PLUGIN=0
 BUILD_SERVICE=0
 
+# update-service.sh pulls without installing the panel, so a clean pull can
+# still leave CloudTAK building an older plugin/ than the one checked out.
+if ! diff -rq "$PLUGIN_SRC" "$PLUGIN_DEST" >/dev/null 2>&1; then
+    say "Installed plugin differs from $PLUGIN_SRC"
+    BUILD_PLUGIN=1
+fi
+
 if [ "$BEFORE" = "$AFTER" ]; then
-    if [ "$FORCE" -eq 0 ]; then
+    if [ "$FORCE" -eq 0 ] && [ "$BUILD_PLUGIN" -eq 0 ]; then
         say "Already up to date at $(git rev-parse --short HEAD). Nothing to do."
         echo "   (--force rebuilds anyway)"
         exit 0
     fi
-    BUILD_PLUGIN=1
-    BUILD_SERVICE=1
 else
     CHANGED="$(git diff --name-only "$BEFORE" "$AFTER")"
     printf '   %s -> %s\n' "${BEFORE:0:7}" "${AFTER:0:7}"
