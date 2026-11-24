@@ -40,8 +40,8 @@ test('v14 font-faces URLs resolve against the internal API and keep their unicod
     delete style.glyphs;
     style['font-faces'] = {
         'Open Sans Bold': [
-            { url: '/assets/open-sans-latin-700-normal-abc.woff2', 'unicode-range': ['U+0000-00FF'] },
-            { url: 'https://evil.example.com/x.woff2', 'unicode-range': ['U+0100-02BA'] },
+            { 'url': '/assets/open-sans-latin-700-normal-abc.woff2', 'unicode-range': ['U+0000-00FF'] },
+            { 'url': 'https://evil.example.com/x.woff2', 'unicode-range': ['U+0100-02BA'] },
         ],
     };
 
@@ -49,7 +49,7 @@ test('v14 font-faces URLs resolve against the internal API and keep their unicod
 
     assert.deepEqual((out['font-faces'] as Record<string, unknown>)['Open Sans Bold'], [
         {
-            url: 'http://cloudtak-api:5000/assets/open-sans-latin-700-normal-abc.woff2',
+            'url': 'http://cloudtak-api:5000/assets/open-sans-latin-700-normal-abc.woff2',
             'unicode-range': ['U+0000-00FF'],
         },
     ]);
