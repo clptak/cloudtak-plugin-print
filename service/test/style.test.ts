@@ -35,6 +35,28 @@ test('glyphs are rewritten to the internal API with placeholders and token intac
     );
 });
 
+test('v14 font-faces URLs resolve against the internal API and keep their unicode ranges', () => {
+    const style = base() as Record<string, unknown>;
+    delete style.glyphs;
+    style['font-faces'] = {
+        'Open Sans Bold': [
+            { url: '/assets/open-sans-latin-700-normal-abc.woff2', 'unicode-range': ['U+0000-00FF'] },
+            { url: 'https://evil.example.com/x.woff2', 'unicode-range': ['U+0100-02BA'] },
+        ],
+    };
+
+    const { style: out, warnings } = rewriteStyle(style, OPTS);
+
+    assert.deepEqual((out['font-faces'] as Record<string, unknown>)['Open Sans Bold'], [
+        {
+            url: 'http://cloudtak-api:5000/assets/open-sans-latin-700-normal-abc.woff2',
+            'unicode-range': ['U+0000-00FF'],
+        },
+    ]);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /font-faces host not allowed/);
+});
+
 test('tile URLs on the public tiles host are rewritten to the internal tile service', () => {
     const style = base();
     style.sources.basemap = {

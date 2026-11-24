@@ -209,6 +209,41 @@ export function rewriteStyle(input: StyleDocument, opts: RewriteOptions): Rewrit
         }
     }
 
+    // CloudTAK v14 drops `glyphs` and draws labels from bundled font files named in
+    // `font-faces` (app-relative URLs such as /assets/open-sans-*.woff2). Resolve them
+    // against the API so the headless page fetches them from the internal address.
+    const faces = style['font-faces'];
+    if (faces && typeof faces === 'object' && !Array.isArray(faces)) {
+        const fontFaces = faces as Record<string, unknown>;
+        const rewriteFace = (raw: string, name: string): string | undefined => {
+            const { url, kind } = rewriteUrl(raw, opts);
+            if (kind === 'denied') {
+                warnings.push(
+                    `font-faces host not allowed, '${name}' labels will fall back: ${redact(raw)}`
+                    + hint(opts),
+                );
+                return undefined;
+            }
+            return url;
+        };
+
+        for (const [name, entry] of Object.entries(fontFaces)) {
+            if (typeof entry === 'string') {
+                const url = rewriteFace(entry, name);
+                if (url) fontFaces[name] = url;
+                else delete fontFaces[name];
+            } else if (Array.isArray(entry)) {
+                fontFaces[name] = (entry as Array<Record<string, unknown>>).filter((face) => {
+                    if (typeof face?.url !== 'string') return true;
+                    const url = rewriteFace(face.url, name);
+                    if (!url) return false;
+                    face.url = url;
+                    return true;
+                });
+            }
+        }
+    }
+
     const sources = (style.sources ?? {}) as Record<string, Record<string, unknown>>;
     const dropped = new Set<string>();
 
